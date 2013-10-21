@@ -2,27 +2,51 @@
 ;(function(undefined) {
   'use strict';
 
-  /** Load modules */
-  var fs = require('fs'),
-      path = require('path'),
-      vm = require('vm'),
+  /** Load Node.js modules */
+  var vm = require('vm');
+
+  /** Load other modules */
+  var _ = require('../dist/lodash.js'),
       build = require('../build.js'),
-      minify = require('../build/minify'),
-      _ = require('../lodash.js');
+      minify = require('../build/minify.js'),
+      util = require('../build/util.js');
+
+  /** Module shortcuts */
+  var fs = util.fs,
+      path = util.path;
+
+  /** Used to avoid `noglobal` false positives caused by `errno` leaked in Node.js */
+  global.errno = true;
+
+  /** The current working directory */
+  var cwd = process.cwd();
+
+  /** Used to prefix relative paths from the current directory */
+  var relativePrefix = '.' + path.sep;
 
   /** The unit testing framework */
   var QUnit = (
-    global.addEventListener || (global.addEventListener = Function.prototype),
+    global.addEventListener = Function.prototype,
     global.QUnit = require('../vendor/qunit/qunit/qunit.js'),
-    require('../vendor/qunit-clib/qunit-clib.js'),
-    global.addEventListener === Function.prototype && delete global.addEventListener,
+    require('../vendor/qunit-clib/qunit-clib.js').runInContext(global),
+    delete global.addEventListener,
     global.QUnit
   );
 
-  /** The time limit for the tests to run (minutes) */
+  /** Shortcut used to push arrays of values to an array */
+  var push = Array.prototype.push;
+
+  /** The time limit for the tests to run (milliseconds) */
   var timeLimit = process.argv.reduce(function(result, value, index) {
-    return (/--time-limit/.test(value) && parseFloat(process.argv[index + 1])) || result;
-  }, Infinity);
+    if (/--time-limit/.test(value)) {
+      return parseInt(process.argv[index + 1].replace(/(\d+h)?(\d+m)?(\d+s)?/, function(match, h, m, s) {
+        return ((parseInt(h) || 0) * 3600000) +
+               ((parseInt(m) || 0) * 60000) +
+               ((parseInt(s) || 0) * 1000);
+      })) || result;
+    }
+    return result;
+  }, 0);
 
   /** Used to associate aliases with their real names */
   var aliasToRealMap = {
@@ -39,13 +63,11 @@
     'include': 'contains',
     'inject': 'reduce',
     'methods': 'functions',
+    'object': 'zipObject',
     'select': 'filter',
     'tail': 'rest',
     'take': 'first',
-    'unique': 'uniq',
-
-    // method used by the `backbone` and `underscore` builds
-    'findWhere': 'find'
+    'unique': 'uniq'
   };
 
   /** Used to associate real names with their aliases */
@@ -54,7 +76,7 @@
     'contains': ['include'],
     'every': ['all'],
     'filter': ['select'],
-    'find': ['detect', 'findWhere'],
+    'find': ['detect'],
     'first': ['head', 'take'],
     'forEach': ['each'],
     'functions': ['methods'],
@@ -63,19 +85,24 @@
     'reduceRight': ['foldr'],
     'rest': ['drop', 'tail'],
     'some': ['any'],
-    'uniq': ['unique']
+    'uniq': ['unique'],
+    'zipObject': ['object']
   };
 
+  /** List of all methods */
+  var allMethods = _.functions(_).filter(function(methodName) {
+    return !/^_/.test(methodName);
+  });
+
   /** List of all Lo-Dash methods */
-  var allMethods = _.functions(_)
-    .filter(function(methodName) { return !/^_/.test(methodName); })
-    .concat('chain');
+  var lodashMethods = _.without(allMethods, 'findWhere');
 
   /** List of "Arrays" category methods */
   var arraysMethods = [
     'compact',
     'difference',
     'drop',
+    'findIndex',
     'first',
     'flatten',
     'head',
@@ -93,13 +120,15 @@
     'union',
     'uniq',
     'unique',
+    'unzip',
     'without',
-    'zip'
+    'zip',
+    'zipObject'
   ];
 
   /** List of "Chaining" category methods */
   var chainingMethods = [
-    'mixin',
+    'chain',
     'tap',
     'value'
   ];
@@ -117,6 +146,7 @@
     'every',
     'filter',
     'find',
+    'findWhere',
     'foldl',
     'foldr',
     'forEach',
@@ -146,6 +176,7 @@
     'bind',
     'bindAll',
     'bindKey',
+    'createCallback',
     'compose',
     'debounce',
     'defer',
@@ -165,6 +196,7 @@
     'cloneDeep',
     'defaults',
     'extend',
+    'findKey',
     'forIn',
     'forOwn',
     'functions',
@@ -193,6 +225,7 @@
     'omit',
     'pairs',
     'pick',
+    'transform',
     'values'
   ];
 
@@ -200,9 +233,12 @@
   var utilityMethods = [
     'escape',
     'identity',
+    'mixin',
     'noConflict',
+    'parseInt',
     'random',
     'result',
+    'runInContext',
     'template',
     'times',
     'unescape',
@@ -229,6 +265,7 @@
     'has',
     'indexOf',
     'initial',
+    'invert',
     'invoke',
     'isArray',
     'isEmpty',
@@ -244,7 +281,9 @@
     'max',
     'min',
     'mixin',
+    'omit',
     'once',
+    'pairs',
     'pick',
     'reduce',
     'reduceRight',
@@ -259,22 +298,44 @@
     'toArray',
     'uniqueId',
     'value',
+    'values',
     'without'
   ];
 
-  /** List of methods used by Underscore */
-  var underscoreMethods = _.without.apply(_, [allMethods].concat([
+  /** List of Lo-Dash only methods */
+  var lodashOnlyMethods = [
     'at',
     'bindKey',
     'cloneDeep',
+    'createCallback',
+    'findIndex',
+    'findKey',
     'forIn',
     'forOwn',
     'isPlainObject',
     'merge',
-    'partialRight'
-  ]));
+    'parseInt',
+    'partialRight',
+    'runInContext',
+    'transform',
+    'unzip'
+  ];
+
+  /** List of Underscore methods */
+  var underscoreMethods = _.without.apply(_, [allMethods].concat(lodashOnlyMethods));
 
   /*--------------------------------------------------------------------------*/
+
+  /**
+   * Capitalizes a given string.
+   *
+   * @private
+   * @param {String} string The string to capitalize.
+   * @returns {String} Returns the capitalized string.
+   */
+  function capitalize(string) {
+    return string[0].toUpperCase() + string.slice(1);
+  }
 
   /**
    * Creates a context object to use with `vm.runInContext`.
@@ -299,7 +360,7 @@
   function expandMethodNames(methodNames) {
     return methodNames.reduce(function(result, methodName) {
       var realName = getRealName(methodName);
-      result.push.apply(result, [realName].concat(getAliases(realName)));
+      push.apply(result, [realName].concat(getAliases(realName)));
       return result;
     }, []);
   }
@@ -369,7 +430,7 @@
         func = lodash[methodName];
 
     try {
-      if (arraysMethods.indexOf(methodName) > -1) {
+      if (_.contains(arraysMethods, methodName)) {
         if (/(?:indexOf|sortedIndex|without)$/i.test(methodName)) {
           func(array, string);
         } else if (/^(?:difference|intersection|union|uniq|zip)/.test(methodName)) {
@@ -380,19 +441,10 @@
           func(array);
         }
       }
-      else if (chainingMethods.indexOf(methodName) > -1) {
-        if (methodName == 'chain') {
-          lodash.chain(array);
-          lodash(array).chain();
-        }
-        else if (methodName == 'mixin') {
-          lodash.mixin({});
-        }
-        else {
-          lodash(array)[methodName](noop);
-        }
+      else if (_.contains(chainingMethods, methodName)) {
+        lodash(array)[methodName](noop);
       }
-      else if (collectionsMethods.indexOf(methodName) > -1) {
+      else if (_.contains(collectionsMethods, methodName)) {
         if (/^(?:count|group|sort)By$/.test(methodName)) {
           func(array, noop);
           func(array, string);
@@ -411,7 +463,7 @@
           func(array, 'slice');
           func(object, 'toFixed');
         }
-        else if (methodName == 'where') {
+        else if (methodName == 'findWhere' || methodName == 'where') {
           func(array, object);
           func(object, object);
         }
@@ -420,7 +472,7 @@
           func(object, noop, object);
         }
       }
-      else if (functionsMethods.indexOf(methodName) > -1) {
+      else if (_.contains(functionsMethods, methodName)) {
         if (methodName == 'after') {
           func(1, noop);
         } else if (methodName == 'bindAll') {
@@ -437,7 +489,7 @@
           func(noop);
         }
       }
-      else if (objectsMethods.indexOf(methodName) > -1) {
+      else if (_.contains(objectsMethods, methodName)) {
         if (methodName == 'clone') {
           func(object);
           func(object, true);
@@ -454,9 +506,13 @@
           func(object);
         }
       }
-      else if (utilityMethods.indexOf(methodName) > -1) {
-        if (methodName == 'result') {
+      else if (_.contains(utilityMethods, methodName)) {
+        if (methodName == 'mixin') {
+          func({});
+        } else if (methodName == 'result') {
           func(object, 'b');
+        } else if (methodName == 'runInContext') {
+          func();
         } else if (methodName == 'template') {
           func(template, object);
           func(template, null, { 'imports': object })(object);
@@ -479,10 +535,10 @@
   QUnit.module('minified AMD snippet');
 
   (function() {
-    var start = _.once(QUnit.start);
+    var start = _.after(2, _.once(QUnit.start));
 
     asyncTest('`lodash`', function() {
-      build(['-s'], function(data) {
+      build(['-s', 'exclude='], function(data) {
         // used by r.js build optimizer
         var defineHasRegExp = /typeof\s+define\s*==(=)?\s*['"]function['"]\s*&&\s*typeof\s+define\.amd\s*==(=)?\s*['"]object['"]\s*&&\s*define\.amd/g,
             basename = path.basename(data.outputPath, '.js');
@@ -498,42 +554,60 @@
   QUnit.module('template builds');
 
   (function() {
-    var templatePath = __dirname + '/template';
+    var templatePath = path.join(__dirname, 'template');
 
-    asyncTest('`lodash template=*.jst`', function() {
-      var start = _.after(2, _.once(QUnit.start));
+    var commands = [
+      'template=' + path.join('template', '*.jst'),
+      'template=' + relativePrefix + path.join('template', '*.jst'),
+      'template=' + path.join(templatePath, '*.jst')
+    ];
 
-      build(['-s', 'template=' + templatePath + '/*.jst'], function(data) {
-        var basename = path.basename(data.outputPath, '.js'),
-            context = createContext();
+    commands.forEach(function(command) {
+      asyncTest('`lodash ' + command +'`', function() {
+        var start = _.after(2, _.once(function() {
+          process.chdir(cwd);
+          QUnit.start();
+        }));
 
-        var object = {
-          'a': { 'people': ['moe', 'larry', 'curly'] },
-          'b': { 'epithet': 'stooge' },
-          'c': { 'name': 'ES6' }
-        };
+        process.chdir(__dirname);
 
-        context._ = _;
-        vm.runInContext(data.source, context);
+        build(['-s', command], function(data) {
+          var basename = path.basename(data.outputPath, '.js'),
+              context = createContext();
 
-        equal(_.templates.a(object.a).replace(/[\r\n]+/g, ''), '<ul><li>moe</li><li>larry</li><li>curly</li></ul>', basename);
-        equal(_.templates.b(object.b), 'Hello stooge.', basename);
-        equal(_.templates.c(object.c), 'Hello ES6!', basename);
-        delete _.templates;
-        start();
+          var object = {
+            'a': { 'people': ['moe', 'larry', 'curly'] },
+            'b': { 'epithet': 'stooge' },
+            'c': { 'name': 'ES6' }
+          };
+
+          context._ = _;
+          vm.runInContext(data.source, context);
+
+          var actual = _.templates.a(object.a);
+          equal(actual.replace(/[\r\n]+/g, ''), '<ul><li>moe</li><li>larry</li><li>curly</li></ul>', basename);
+
+          equal(_.templates.b(object.b), 'Hello stooge.', basename);
+          equal(_.templates.c(object.c), 'Hello ES6!', basename);
+
+          delete _.templates;
+          start();
+        });
       });
     });
 
-    var commands = [
+    commands = [
       '',
       'moduleId=underscore'
     ];
 
     commands.forEach(function(command) {
-      asyncTest('`lodash template=*.jst` exports=amd' + (command ? ' ' + command : ''), function() {
+      var expectedId = /underscore/.test(command) ? 'underscore' : 'lodash';
+
+      asyncTest('`lodash template=*.jst exports=amd' + (command ? ' ' + command : '') + '`', function() {
         var start = _.after(2, _.once(QUnit.start));
 
-        build(['-s', 'template=' + templatePath + '/*.jst', 'exports=amd'].concat(command || []), function(data) {
+        build(['-s', 'template=' + path.join(templatePath, '*.jst'), 'exports=amd'].concat(command || []), function(data) {
           var moduleId,
               basename = path.basename(data.outputPath, '.js'),
               context = createContext();
@@ -546,17 +620,21 @@
           context.define.amd = {};
           vm.runInContext(data.source, context);
 
-          equal(moduleId, (command ? 'underscore' : 'lodash'), basename);
+          equal(moduleId, expectedId, basename);
           ok('a' in _.templates && 'b' in _.templates, basename);
+
+          var actual = _.templates.a({ 'people': ['moe', 'larry'] });
+          equal(actual.replace(/[\r\n]+/g, ''), '<ul><li>moe</li><li>larry</li></ul>', basename);
+
           delete _.templates;
           start();
         });
       });
 
-      asyncTest('`lodash settings=...`' + (command ? ' ' + command : ''), function() {
+      asyncTest('`lodash settings=...' + (command ? ' ' + command : '') + '`', function() {
         var start = _.after(2, _.once(QUnit.start));
 
-        build(['-s', 'template=' + templatePath + '/*.tpl', 'settings={interpolate:/\\{\\{([\\s\\S]+?)\\}\\}/}'].concat(command || []), function(data) {
+        build(['-s', 'template=' + path.join(templatePath, '*.tpl'), 'settings={interpolate:/{{([\\s\\S]+?)}}/}'].concat(command || []), function(data) {
           var moduleId,
               basename = path.basename(data.outputPath, '.js'),
               context = createContext();
@@ -573,8 +651,8 @@
           context.define.amd = {};
           vm.runInContext(data.source, context);
 
-          equal(moduleId, (command ? 'underscore' : 'lodash'), basename);
-          equal(_.templates.d(object.d), 'Hello Mustache!', basename);
+          equal(moduleId, expectedId, basename);
+          equal(_.templates.d(object.d), 'Hallå Mustache!', basename);
           delete _.templates;
           start();
         });
@@ -631,6 +709,139 @@
 
   /*--------------------------------------------------------------------------*/
 
+  QUnit.module('csp modifier');
+
+  (function() {
+    asyncTest('`lodash csp`', function() {
+      var sources = [];
+
+      var check = _.after(2, _.once(function() {
+        ok(_.every(sources, function(source) {
+          // remove `Function` in `_.template` before testing for additional use
+          return !/\bFunction\(/.test(source.replace(/= *\w+\(\w+, *['"]return.+?apply[^)]+\)/, ''));
+        }));
+
+        equal(sources[0], sources[1]);
+        QUnit.start();
+      }));
+
+      var callback = function(data) {
+        // remove copyright header and append to `sources`
+        sources.push(data.source.replace(/^\/\**[\s\S]+?\*\/\n/, ''));
+        check();
+      };
+
+      build(['-s', '-d', 'csp'], callback);
+      build(['-s', '-d', 'modern'], callback);
+    });
+  }());
+
+  /*--------------------------------------------------------------------------*/
+
+  QUnit.module('mobile modifier');
+
+  (function() {
+    asyncTest('`lodash mobile`', function() {
+      var start = _.after(2, _.once(QUnit.start));
+
+      build(['-s', 'mobile'], function(data) {
+        var array = [1, 2, 3],
+            basename = path.basename(data.outputPath, '.js'),
+            context = createContext(),
+            object1 = [{ 'a': 1 }],
+            object2 = [{ 'b': 2 }],
+            object3 = [{ 'a': 1, 'b': 2 }],
+            circular1 = { 'a': 1 },
+            circular2 = { 'a': 1 };
+
+        circular1.b = circular1;
+        circular2.b = circular2;
+
+        vm.runInContext(data.source, context);
+        var lodash = context._;
+
+        deepEqual(lodash.merge(object1, object2), object3, basename);
+        deepEqual(lodash.sortBy([3, 2, 1], _.identity), array, basename);
+        strictEqual(lodash.isEqual(circular1, circular2), true, basename);
+
+        var actual = lodash.cloneDeep(circular1);
+        ok(actual != circular1 && actual.b == actual, basename);
+        start();
+      });
+    });
+  }());
+
+  /*--------------------------------------------------------------------------*/
+
+  QUnit.module('modern modifier');
+
+  (function() {
+    asyncTest('`lodash modern`', function() {
+      var start = _.after(2, _.once(QUnit.start));
+
+      build(['-s', 'modern'], function(data) {
+        var basename = path.basename(data.outputPath, '.js'),
+            context = createContext();
+
+        vm.runInContext(data.source, context);
+        var lodash = context._;
+
+        strictEqual(lodash.isPlainObject(Object.create(null)), true, basename);
+        start();
+      });
+    });
+  }());
+
+  /*--------------------------------------------------------------------------*/
+
+  QUnit.module('source-map modifier');
+
+  (function() {
+    var mapCommands = [
+      '-p',
+      '-p custom.map',
+      '--source-map',
+      '--source-map custom.map'
+    ];
+
+    var outputCommands = [
+      '',
+      '-o foo.js',
+      '-m -o bar.js'
+    ];
+
+    mapCommands.forEach(function(mapCommand) {
+      outputCommands.forEach(function(outputCommand) {
+        asyncTest('`lodash ' + mapCommand + (outputCommand ? ' ' + outputCommand : '') + '`', function() {
+          var callback = _.once(function(data) {
+            var basename = path.basename(data.outputPath, '.js'),
+                comment = (/(\s*\/\/.*\s*|\s*\/\*[^*]*\*+(?:[^\/][^*]*\*+)*\/\s*)$/.exec(data.source) || [])[0],
+                sources = /foo.js/.test(outputCommand) ? ['foo.js'] : ['lodash' + (outputCommand.length ? '' : '.custom') + '.js'],
+                sourceMap = JSON.parse(data.sourceMap),
+                sourceMapURL = (/\w+(?=\.map$)/.exec(mapCommand) || [basename])[0];
+
+            ok(RegExp('/\\*\\n//@ sourceMappingURL=' + sourceMapURL + '.map\\n\\*/').test(comment), basename);
+            equal(sourceMap.file, basename + '.js', basename);
+            deepEqual(sourceMap.sources, sources, basename);
+
+            process.chdir(cwd);
+            QUnit.start();
+          });
+
+          process.chdir(__dirname);
+
+          outputCommand = outputCommand ? outputCommand.split(' ') : [];
+          if (!_.contains(outputCommand, '-m')) {
+            callback = _.after(2, callback);
+          }
+          build(['-s'].concat(mapCommand.split(' '), outputCommand), callback);
+        });
+      });
+    });
+  }());
+
+  /*--------------------------------------------------------------------------*/
+
   QUnit.module('strict modifier');
 
   (function() {
@@ -639,7 +850,12 @@
       'b': undefined
     });
 
-    ['non-strict', 'strict'].forEach(function(strictMode, index) {
+    var modes = [
+      'non-strict',
+      'strict'
+    ];
+
+    modes.forEach(function(strictMode, index) {
       asyncTest(strictMode + ' should ' + (index ? 'error': 'silently fail') + ' attempting to overwrite read-only properties', function() {
         var commands = ['-s', 'include=bindAll,defaults,extend'],
             start = _.after(2, _.once(QUnit.start));
@@ -677,19 +893,211 @@
 
   /*--------------------------------------------------------------------------*/
 
+  QUnit.module('underscore modifier');
+
+  (function() {
+    asyncTest('modified methods should work correctly', function() {
+      var start = _.after(2, _.once(QUnit.start));
+
+      build(['-s', 'underscore'], function(data) {
+        var array = [{ 'a': 1, 'b': 2 }, { 'a': 2, 'b': 2 }],
+            basename = path.basename(data.outputPath, '.js'),
+            context = createContext();
+
+        vm.runInContext(data.source, context);
+        var lodash = context._;
+
+        var object = {
+          'fn': lodash.bind(function(foo) {
+            return foo + this.bar;
+          }, { 'bar': 1 }, 1)
+        };
+
+        equal(object.fn(), 2, '_.bind: ' + basename);
+
+        var actual = lodash.clone('a', function() {
+          return this.a;
+        }, { 'a': 'A' });
+
+        equal(actual, 'a', '_.clone should ignore `callback` and `thisArg`: ' + basename);
+        strictEqual(lodash.clone(array, true)[0], array[0], '_.clone should ignore `deep`: ' + basename);
+
+        strictEqual(lodash.contains({ 'a': 1, 'b': 2 }, 1), true, '_.contains should work with objects: ' + basename);
+        strictEqual(lodash.contains([1, 2, 3], 1, 2), true, '_.contains should ignore `fromIndex`: ' + basename);
+        strictEqual(lodash.every([true, false, true]), false, '_.every: ' + basename);
+
+        function Foo() {}
+        Foo.prototype = { 'a': 1 };
+
+        actual = lodash.defaults({ 'a': null }, { 'a': 1 });
+        strictEqual(actual.a, 1, '_.defaults should overwrite `null` values: ' + basename);
+
+        deepEqual(lodash.defaults({}, new Foo), Foo.prototype, '_.defaults should assign inherited `source` properties: ' + basename);
+        deepEqual(lodash.extend({}, new Foo), Foo.prototype, '_.extend should assign inherited `source` properties: ' + basename);
+
+        var callback = function(a, b) {
+          actual = this[b];
+        };
+
+        actual = lodash.extend({}, { 'a': 0 }, callback, [2]);
+        strictEqual(actual.a, 0, '_.extend should ignore `callback` and `thisArg`: ' + basename);
+
+        actual = lodash.find(array, function(value) {
+          return 'a' in value;
+        });
+
+        equal(actual, _.first(array), '_.find: ' + basename);
+
+        var last;
+        actual = lodash.forEach(array, function(value) {
+          last = value;
+          return false;
+        });
+
+        equal(last, _.last(array), '_.forEach should not exit early: ' + basename);
+        equal(actual, undefined, '_.forEach should return `undefined`: ' + basename);
+
+        lodash.forEach([1], callback, [2]);
+        equal(actual, 2, '_.forEach supports the `thisArg` argument when iterating arrays: ' + basename);
+
+        lodash.forEach({ 'a': 1 }, callback, { 'a': 2 });
+        equal(actual, 2, '_.forEach supports the `thisArg` argument when iterating objects: ' + basename);
+
+        array = [{ 'a': [1, 2] }, { 'a': [3] }];
+
+        actual = lodash.flatten(array, function(value, index) {
+          return this[index].a;
+        }, array);
+
+        deepEqual(actual, array, '_.flatten should should ignore `callback` and `thisArg`: ' + basename);
+        deepEqual(lodash.flatten(array, 'a'), array, '_.flatten should should ignore string `callback` values: ' + basename);
+
+        object = { 'length': 0, 'splice': Array.prototype.splice };
+        equal(lodash.isEmpty(object), false, '_.isEmpty should return `false` for jQuery/MooTools DOM query collections: ' + basename);
+
+        object = { 'a': 1, 'b': 2, 'c': 3 };
+        equal(lodash.isEqual(object, { 'a': 1, 'b': 0, 'c': 3 }), false, '_.isEqual: ' + basename);
+
+        actual = lodash.isEqual('a', 'b', function(a, b) {
+          return this[a] == this[b];
+        }, { 'a': 1, 'b': 1 });
+
+        strictEqual(actual, false, '_.isEqual should ignore `callback` and `thisArg`: ' + basename);
+
+        equal(lodash.max('abc'), -Infinity, '_.max should return `-Infinity` for strings: ' + basename);
+        equal(lodash.min('abc'), Infinity, '_.min should return `Infinity` for strings: ' + basename);
+
+        // avoid issues comparing objects with `deepEqual`
+        object = { 'a': 1, 'b': 2, 'c': 3 };
+        actual = lodash.omit(object, function(value) { return value == 3; });
+        deepEqual(_.keys(actual).sort(), ['a', 'b', 'c'], '_.omit should not accept a `callback`: ' + basename);
+
+        actual = lodash.pick(object, function(value) { return value != 3; });
+        deepEqual(_.keys(actual), [], '_.pick should not accept a `callback`: ' + basename);
+
+        strictEqual(lodash.result(), null, '_.result should return `null` for falsey `object` arguments: ' + basename);
+        strictEqual(lodash.some([false, true, false]), true, '_.some: ' + basename);
+        deepEqual(lodash.times(null, function() {}), [null], '_.times should not coerce `n` to a number: ' + basename);
+        equal(lodash.template('${a}', object), '${a}', '_.template should ignore ES6 delimiters: ' + basename);
+        equal('support' in lodash, false, '_.support should not exist: ' + basename);
+        equal('imports' in lodash.templateSettings, false, '_.templateSettings should not have an "imports" property: ' + basename);
+        strictEqual(lodash.uniqueId(0), '1', '_.uniqueId should ignore a prefix of `0`: ' + basename);
+
+        var collection = [{ 'a': { 'b': 1, 'c': 2 } }];
+        deepEqual(lodash.where(collection, { 'a': { 'b': 1 } }), [], '_.where performs shallow comparisons: ' + basename);
+
+        collection = [{ 'a': 1 }, { 'a': 1 }];
+        deepEqual(lodash.where(collection, { 'a': 1 }, true), collection[0], '_.where supports a `first` argument: ' + basename);
+        deepEqual(lodash.where(collection, {}, true), null, '_.where should return `null` when passed `first` and falsey `properties`: ' + basename);
+
+        deepEqual(lodash.findWhere(collection, { 'a': 1 }), collection[0], '_.findWhere: ' + basename);
+        strictEqual(lodash.findWhere(collection, {}), null, '_.findWhere should return `null` for falsey `properties`: ' + basename);
+
+        start();
+      });
+    });
+
+    asyncTest('should not have any Lo-Dash-only methods', function() {
+      var start = _.after(2, _.once(QUnit.start));
+
+      build(['-s', 'underscore'], function(data) {
+        var basename = path.basename(data.outputPath, '.js'),
+            context = createContext();
+
+        vm.runInContext(data.source, context);
+        var lodash = context._;
+
+        _.each(lodashOnlyMethods.concat('assign'), function(methodName) {
+          equal(lodash[methodName], undefined, '_.' + methodName + ' should not exist: ' + basename);
+        });
+
+        start();
+      });
+    });
+
+    asyncTest('`lodash underscore include=partial`', function() {
+      var start = _.after(2, _.once(QUnit.start));
+
+      build(['-s', 'underscore', 'include=partial'], function(data) {
+        var basename = path.basename(data.outputPath, '.js'),
+            context = createContext();
+
+        vm.runInContext(data.source, context);
+        var lodash = context._;
+
+        equal(lodash.partial(_.identity, 2)(), 2, '_.partial: ' + basename);
+        start();
+      });
+    });
+
+    var commands = [
+      'plus=clone',
+      'plus=cloneDeep'
+    ];
+
+    commands.forEach(function(command, index) {
+      asyncTest('`lodash underscore ' + command +'`', function() {
+        var start = _.after(2, _.once(QUnit.start));
+
+        build(['-s', 'underscore', command], function(data) {
+          var array = [{ 'value': 1 }],
+              basename = path.basename(data.outputPath, '.js'),
+              context = createContext();
+
+          vm.runInContext(data.source, context, true);
+          var lodash = context._;
+
+          _.each(index ? ['clone','cloneDeep'] : ['clone'], function(methodName) {
+            var clone = (methodName == 'clone')
+              ? lodash.clone(array, true)
+              : lodash.cloneDeep(array);
+
+            ok(_.isEqual(array, clone), basename);
+            notEqual(array[0], clone[0], basename);
+          });
+
+          start();
+        });
+      });
+    });
+  }());
+
+  /*--------------------------------------------------------------------------*/
+
   QUnit.module('underscore chaining methods');
 
   (function() {
     var commands = [
       'backbone',
-      'underscore'
+      'underscore',
+      'modern plus=chain'
     ];
 
     commands.forEach(function(command) {
       asyncTest('`lodash ' + command +'`', function() {
         var start = _.after(2, _.once(QUnit.start));
 
-        build(['-s', command], function(data) {
+        build(['-s'].concat(command.split(' ')), function(data) {
           var basename = path.basename(data.outputPath, '.js'),
               context = createContext();
 
@@ -721,157 +1129,74 @@
 
   /*--------------------------------------------------------------------------*/
 
-  QUnit.module('underscore modifier');
+ QUnit.module('exclude command');
 
   (function() {
-    asyncTest('modified methods should work correctly', function() {
-      var start = _.after(2, _.once(QUnit.start));
+    var commands = [
+      'exclude',
+      'minus'
+    ];
 
-      build(['-s', 'underscore'], function(data) {
-        var last,
-            array = [{ 'a': 1, 'b': 2 }, { 'a': 2, 'b': 2 }],
-            basename = path.basename(data.outputPath, '.js'),
-            context = createContext();
+    commands.forEach(function(command) {
+      asyncTest('`lodash ' + command + '=runInContext`', function() {
+        var start = _.after(2, _.once(QUnit.start));
 
-        vm.runInContext(data.source, context);
-        var lodash = context._;
+        build(['-s', command + '=runInContext'], function(data) {
+          var basename = path.basename(data.outputPath, '.js'),
+              context = createContext(),
+              source = data.source;
 
-        var object = {
-          'fn': lodash.bind(function(foo) {
-            return foo + this.bar;
-          }, { 'bar': 1 }, 1)
-        };
+          vm.runInContext(data.source, context);
 
-        equal(object.fn(), 2, '_.bind: ' + basename);
+          var lodash = context._,
+              array = [0];
 
-        var actual = lodash.clone('a', function() {
-          return this.a;
-        }, { 'a': 'A' });
+          var actual = lodash.map(array, function() {
+            return String(this[0]);
+          }, array);
 
-        equal(actual, 'a', '_.clone should ignore `callback` and `thisArg`: ' + basename);
-        strictEqual(lodash.clone(array, true)[0], array[0], '_.clone should ignore `deep`: ' + basename);
-
-        strictEqual(lodash.contains({ 'a': 1, 'b': 2 }, 1), true, '_.contains should work with objects: ' + basename);
-        strictEqual(lodash.contains([1, 2, 3], 1, 2), true, '_.contains should ignore `fromIndex`: ' + basename);
-        strictEqual(lodash.every([true, false, true]), false, '_.every: ' + basename);
-
-        function Foo() {}
-        Foo.prototype = { 'a': 1 };
-
-        deepEqual(lodash.defaults({}, new Foo), Foo.prototype, '_.defaults should assign inherited `source` properties: ' + basename);
-        deepEqual(lodash.extend({}, new Foo), Foo.prototype, '_.extend should assign inherited `source` properties: ' + basename);
-
-        actual = lodash.find(array, function(value) {
-          return 'a' in value;
+          deepEqual(actual, ['0'], basename);
+          equal('runInContext' in lodash, false, basename);
+          start();
         });
+      });
 
-        equal(actual, _.first(array), '_.find: ' + basename);
+      asyncTest('`lodash ' + command + '=mixin`', function() {
+        var start = _.after(2, _.once(QUnit.start));
 
-        actual = lodash.forEach(array, function(value) {
-          last = value;
-          return false;
+        build(['-s', command + '=mixin'], function(data) {
+          var basename = path.basename(data.outputPath, '.js'),
+              context = createContext(),
+              source = data.source;
+
+          vm.runInContext(data.source, context);
+          var lodash = context._;
+
+          var actual = lodash([1, 2, 3])
+            .map(function(num) { return num * num; })
+            .value();
+
+          deepEqual(actual, [1, 4, 9], basename);
+          equal('mixin' in lodash, false, basename);
+          start();
         });
-
-        equal(last, _.last(array), '_.forEach should not exit early: ' + basename);
-        equal(actual, undefined, '_.forEach should return `undefined`: ' + basename);
-
-        object = { 'length': 0, 'splice': Array.prototype.splice };
-        equal(lodash.isEmpty(object), false, '_.isEmpty should return `false` for jQuery/MooTools DOM query collections: ' + basename);
-
-        object = { 'a': 1, 'b': 2, 'c': 3 };
-        equal(lodash.isEqual(object, { 'a': 1, 'b': 0, 'c': 3 }), false, '_.isEqual: ' + basename);
-
-        actual = lodash.isEqual('a', 'b', function(a, b) {
-          return this[a] == this[b];
-        }, { 'a': 1, 'b': 1 });
-
-        strictEqual(actual, false, '_.isEqual should ignore `callback` and `thisArg`: ' + basename);
-
-        equal(lodash.max('abc'), -Infinity, '_.max should return `-Infinity` for strings: ' + basename);
-        equal(lodash.min('abc'), Infinity, '_.min should return `Infinity` for strings: ' + basename);
-
-        // avoid issues comparing objects with `deepEqual`
-        object = { 'a': 1, 'b': 2, 'c': 3 };
-        actual = lodash.omit(object, function(value) { return value == 3; });
-        deepEqual(_.keys(actual).sort(), ['a', 'b', 'c'], '_.omit should not accept a `callback`: ' + basename);
-
-        actual = lodash.pick(object, function(value) { return value != 3; });
-        deepEqual(_.keys(actual), [], '_.pick should not accept a `callback`: ' + basename);
-
-        strictEqual(lodash.result(), null, '_.result should return `null` when passed a falsey `object` argument: ' + basename);
-        strictEqual(lodash.some([false, true, false]), true, '_.some: ' + basename);
-        equal(lodash.template('${a}', object), '${a}', '_.template should ignore ES6 delimiters: ' + basename);
-        equal('imports' in lodash.templateSettings, false, '_.templateSettings should not have an "imports" property: ' + basename);
-        strictEqual(lodash.uniqueId(0), '1', '_.uniqueId should ignore a prefix of `0`: ' + basename);
-
-        var collection = [{ 'a': { 'b': 1, 'c': 2 } }];
-        deepEqual(lodash.where(collection, { 'a': { 'b': 1 } }), [], '_.where performs shallow comparisons: ' + basename);
-
-        collection = [{ 'a': 1 }, { 'a': 1 }];
-        deepEqual(lodash.where(collection, { 'a': 1 }, true), collection[0], '_.where supports a `first` argument: ' + basename);
-        deepEqual(lodash.findWhere(collection, { 'a': 1 }), collection[0], '_.findWhere: ' + basename);
-
-        start();
       });
-    });
 
-    asyncTest('should not have any Lo-Dash-only methods', function() {
-      var start = _.after(2, _.once(QUnit.start));
+      asyncTest('`lodash ' + command + '=value`', function() {
+        var start = _.after(2, _.once(QUnit.start));
 
-      build(['-s', 'underscore'], function(data) {
-        var basename = path.basename(data.outputPath, '.js'),
-            context = createContext();
+        build(['-s', command + '=value'], function(data) {
+          var basename = path.basename(data.outputPath, '.js'),
+              context = createContext(),
+              source = data.source;
 
-        vm.runInContext(data.source, context);
-        var lodash = context._;
+          vm.runInContext(data.source, context);
+          var lodash = context._;
 
-        _.each([
-          'assign',
-          'at',
-          'bindKey',
-          'forIn',
-          'forOwn',
-          'isPlainObject',
-          'merge',
-          'partialRight'
-        ], function(methodName) {
-          equal(lodash[methodName], undefined, '_.' + methodName + ' should not exist: ' + basename);
+          strictEqual(lodash([1]), undefined, basename);
+          deepEqual(_.keys(lodash.prototype), [], basename);
+          start();
         });
-
-        start();
-      });
-    });
-
-    asyncTest('`lodash underscore include=partial`', function() {
-      var start = _.after(2, _.once(QUnit.start));
-
-      build(['-s', 'underscore', 'include=partial'], function(data) {
-        var basename = path.basename(data.outputPath, '.js'),
-            context = createContext();
-
-        vm.runInContext(data.source, context);
-        var lodash = context._;
-
-        equal(lodash.partial(_.identity, 2)(), 2, '_.partial: ' + basename);
-        start();
-      });
-    });
-
-    asyncTest('`lodash underscore plus=clone`', function() {
-      var start = _.after(2, _.once(QUnit.start));
-
-      build(['-s', 'underscore', 'plus=clone'], function(data) {
-        var array = [{ 'value': 1 }],
-            basename = path.basename(data.outputPath, '.js'),
-            context = createContext();
-
-        vm.runInContext(data.source, context);
-        var lodash = context._,
-            clone = lodash.clone(array, true);
-
-        ok(_.isEqual(array, clone), basename);
-        notEqual(array[0], clone[0], basename);
-        start();
       });
     });
   }());
@@ -946,8 +1271,8 @@
 
   (function() {
     var commands = [
-      'iife=this["lodash"]=(function(window,undefined){%output%;return lodash}(this))',
-      'iife=define(function(window,undefined){return function(){%output%;return lodash}}(this));'
+      'iife=this["lodash"]=(function(window){%output%;return _}(this))',
+      'iife=define(function(window){return function(){%output%;return _}}(this));'
     ];
 
     commands.forEach(function(command) {
@@ -978,20 +1303,36 @@
 
   /*--------------------------------------------------------------------------*/
 
-  QUnit.module('output options');
+ QUnit.module('include command');
 
   (function() {
     var commands = [
-      '-o a.js',
-      '--output a.js'
+      'include=mixin',
+      'include=mixin,tap',
+      'include=mixin,value'
     ];
 
     commands.forEach(function(command, index) {
       asyncTest('`lodash ' + command +'`', function() {
-        var start = _.once(QUnit.start);
+        var start = _.after(2, _.once(QUnit.start));
 
-        build(['-s'].concat(command.split(' ')), function(data) {
-          equal(path.basename(data.outputPath, '.js'), 'a', command);
+        build(['-s', command], function(data) {
+          var basename = path.basename(data.outputPath, '.js'),
+              context = createContext(),
+              noop = function() {},
+              source = data.source;
+
+          vm.runInContext(data.source, context);
+          var lodash = context._;
+
+          lodash.mixin({ 'x': noop });
+          equal(lodash.x, noop, basename);
+
+          if (index) {
+            equal(typeof lodash.prototype.x, 'function', basename);
+          } else {
+            equal('x' in lodash.prototype, false, basename);
+          }
           start();
         });
       });
@@ -1000,12 +1341,83 @@
 
   /*--------------------------------------------------------------------------*/
 
-  QUnit.module('stdout options');
+  QUnit.module('no-dep option');
+
+  (function() {
+    var commands = [
+      '-n',
+      '--no-dep'
+    ];
+
+    commands.forEach(function(command) {
+      asyncTest('`lodash modern include=each ' + command +'`', function() {
+        var start = _.after(2, _.once(QUnit.start));
+
+        build(['-s', 'modern', 'include=each', command], function(data) {
+          var basename = path.basename(data.outputPath, '.js'),
+              context = createContext();
+
+          vm.runInContext(data.source, context);
+          var lodash = context._;
+
+          deepEqual(_.functions(lodash), ['each', 'forEach'], basename);
+          start();
+        });
+      });
+    });
+  }());
+
+  /*--------------------------------------------------------------------------*/
+
+  QUnit.module('output option');
+
+  (function() {
+    var nestedPath = path.join(__dirname, 'a', 'b');
+
+    var commands = [
+      '-o a.js',
+      '--output b.js',
+      '-o ' + path.join('a', 'b', 'c.js'),
+      '-o ' + relativePrefix + path.join('a', 'b', 'c.js'),
+      '-o ' + path.join(nestedPath, 'c.js'),
+      '-o name_with_keywords_like_category_include_exclude_plus_minus.js'
+    ];
+
+    commands.forEach(function(command) {
+      asyncTest('`lodash ' + command +'`', function() {
+        var counter = 0,
+            dirs = _.contains(command, 'c.js'),
+            expected = /(\w+)(?=\.js$)/.exec(command)[0];
+
+        var start = _.after(2, _.once(function() {
+          if (dirs) {
+            fs.rmdirSync(nestedPath);
+            fs.rmdirSync(path.dirname(nestedPath));
+          }
+          process.chdir(cwd);
+          QUnit.start();
+        }));
+
+        process.chdir(__dirname);
+
+        build(['-s'].concat(command.split(' ')), function(data) {
+          var basename = path.basename(data.outputPath, '.js');
+          equal(basename, expected + (counter++ ? '.min' : ''), command);
+          start();
+        });
+      });
+    });
+  }());
+
+  /*--------------------------------------------------------------------------*/
+
+  QUnit.module('stdout option');
 
   (function() {
     var commands = [
       '-c',
-      '--stdout'
+      '-c -d',
+      '--stdout',
     ];
 
     commands.forEach(function(command, index) {
@@ -1018,8 +1430,10 @@
           written = string;
         };
 
-        build([command, 'exports=', 'include='], function(data) {
+        build(['exports=', 'include='].concat(command.split(' ')), function(data) {
           process.stdout.write = write;
+
+          strictEqual('outputPath' in data, false);
           equal(written, data.source);
           equal(arguments.length, 1);
           start();
@@ -1030,40 +1444,105 @@
 
   /*--------------------------------------------------------------------------*/
 
-  QUnit.module('mobile build');
+  QUnit.module('underscore builds with lodash methods');
 
   (function() {
-    asyncTest('`lodash mobile`', function() {
-      var start = _.after(2, _.once(QUnit.start));
+    var methodNames = [
+      'assign',
+      'bindKey',
+      'clone',
+      'contains',
+      'debouce',
+      'defaults',
+      'defer',
+      'difference',
+      'every',
+      'filter',
+      'find',
+      'findWhere',
+      'first',
+      'flatten',
+      'forEach',
+      'forOwn',
+      'intersection',
+      'initial',
+      'isEmpty',
+      'isEqual',
+      'isPlainObject',
+      'isRegExp',
+      'last',
+      'map',
+      'max',
+      'memoize',
+      'min',
+      'omit',
+      'partial',
+      'partialRight',
+      'pick',
+      'pluck',
+      'reduce',
+      'reduceRight',
+      'result',
+      'rest',
+      'some',
+      'tap',
+      'template',
+      'throttle',
+      'times',
+      'toArray',
+      'transform',
+      'uniq',
+      'uniqueId',
+      'value',
+      'where',
+      'zip'
+    ];
 
-      build(['-s', 'mobile'], function(data) {
-        var basename = path.basename(data.outputPath, '.js'),
-            context = createContext();
+    function strip(value) {
+      return String(value)
+        .replace(/^ *\/\/.*/gm, '')
+        .replace(/\b(?:basicEach|context|forEach|forOwn|window)\b/g, '')
+        .replace(/\blodash\.(createCallback\()\b/g, '$1')
+        .replace(/[\s;]/g, '');
+    }
 
-        try {
-          vm.runInContext(data.source, context);
-        } catch(e) {
-          console.log(e);
-        }
+    methodNames.forEach(function(methodName) {
+      var command = 'underscore plus=' + methodName;
 
-        var array = [1, 2, 3],
-            object1 = [{ 'a': 1 }],
-            object2 = [{ 'b': 2 }],
-            object3 = [{ 'a': 1, 'b': 2 }],
-            circular1 = { 'a': 1 },
-            circular2 = { 'a': 1 },
-            lodash = context._;
+      if (methodName == 'createCallback') {
+        command += ',where';
+      }
+      if (methodName == 'zip') {
+        command += ',unzip';
+      }
+      if (methodName != 'chain' && _.contains(chainingMethods.concat('mixin'), methodName)) {
+        command += ',chain';
+      }
+      if (_.contains(['isEqual', 'isPlainObject'], methodName)) {
+        command += ',forIn';
+      }
+      if (_.contains(['contains', 'every', 'find', 'some', 'transform'], methodName)) {
+        command += ',forOwn';
+      }
+      asyncTest('`lodash ' + command +'`', function() {
+        var start = _.after(2, _.once(QUnit.start));
 
-        circular1.b = circular1;
-        circular2.b = circular2;
+        build(['-s'].concat(command.split(' ')), function(data) {
+          var array = [{ 'value': 1 }],
+              basename = path.basename(data.outputPath, '.js'),
+              context = createContext();
 
-        deepEqual(lodash.merge(object1, object2), object3, basename);
-        deepEqual(lodash.sortBy([3, 2, 1], _.identity), array, basename);
-        strictEqual(lodash.isEqual(circular1, circular2), true, basename);
+          vm.runInContext(data.source, context, true);
+          var lodash = context._;
 
-        var actual = lodash.cloneDeep(circular1);
-        ok(actual != circular1 && actual.b == actual, basename);
-        start();
+          if (methodName == 'chain' || methodName == 'findWhere' || (methodName == 'defer' && global.setImmediate)) {
+            notEqual(strip(lodash[methodName]), strip(_[methodName]), basename);
+          } else if (!/\.min$/.test(basename)) {
+            equal(strip(lodash[methodName]), strip(_[methodName]), basename);
+          }
+          testMethod(lodash, methodName, basename);
+          start();
+        });
       });
     });
   }());
@@ -1078,6 +1557,7 @@
       'csp',
       'legacy',
       'mobile',
+      'modern',
       'strict',
       'underscore',
       'category=arrays',
@@ -1090,8 +1570,10 @@
       'include=each,filter,map',
       'include=once plus=bind,Chaining',
       'category=collections,functions',
-      'underscore backbone',
       'backbone legacy category=utilities minus=first,last',
+      'legacy include=defer',
+      'legacy underscore',
+      'modern strict include=isArguments,isArray,isFunction,isPlainObject,key',
       'underscore include=debounce,throttle plus=after minus=throttle',
       'underscore mobile strict category=functions exports=amd,global plus=pick,uniq',
     ]
@@ -1102,17 +1584,23 @@
     );
 
     commands.forEach(function(origCommand) {
-      _.times(3, function(index) {
+      _.times(4, function(index) {
         var command = origCommand;
 
         if (index == 1) {
-          if (/mobile/.test(command)) {
+          if (/\b(?:legacy|mobile)\b/.test(command)) {
             return;
           }
           command = 'mobile ' + command;
         }
-        if (index == 2) {
-          if (/category|underscore/.test(command)) {
+        else if (index == 2) {
+          if (/\b(?:legacy|modern)\b/.test(command)) {
+            return;
+          }
+          command = 'modern ' + command;
+        }
+        else if (index == 3) {
+          if (/\b(?:category|legacy|underscore)\b/.test(command)) {
             return;
           }
           command = 'underscore ' + command;
@@ -1124,8 +1612,10 @@
             var methodNames,
                 basename = path.basename(data.outputPath, '.js'),
                 context = createContext(),
-                isUnderscore = /backbone|underscore/.test(command),
-                exposeAssign = !isUnderscore;
+                isBackbone = /\bbackbone\b/.test(command),
+                isUnderscore = isBackbone || /\bunderscore\b/.test(command),
+                exposeAssign = !isUnderscore,
+                exposeZipObject = !isUnderscore;
 
             try {
               vm.runInContext(data.source, context);
@@ -1133,54 +1623,65 @@
               console.log(e);
             }
             // add method names explicitly
-            if (/include/.test(command)) {
-              methodNames = command.match(/include=(\S*)/)[1].split(/, */);
+            if (/\binclude=/.test(command)) {
+              methodNames = command.match(/\binclude=(\S*)/)[1].split(/, */);
             }
             // add method names required by Backbone and Underscore builds
-            if (/backbone/.test(command) && !methodNames) {
+            if (/\bbackbone\b/.test(command) && !methodNames) {
               methodNames = backboneDependencies.slice();
             }
             if (isUnderscore) {
               if (methodNames) {
-                exposeAssign = methodNames.indexOf('assign') > -1;
+                exposeAssign = _.contains(methodNames, 'assign');
+                exposeZipObject = _.contains(methodNames, 'zipObject');
               } else {
                 methodNames = underscoreMethods.slice();
               }
             }
-            // add method names explicitly by category
-            if (/category/.test(command)) {
-              // resolve method names belonging to each category (case-insensitive)
-              methodNames = command.match(/category=(\S*)/)[1].split(/, */).reduce(function(result, category) {
-                var capitalized = category[0].toUpperCase() + category.toLowerCase().slice(1);
-                return result.concat(getMethodsByCategory(capitalized));
-              }, methodNames || []);
+            if (/\bcategory=/.test(command)) {
+              methodNames = (methodNames || []).concat(command.match(/\bcategory=(\S*)/)[1].split(/, */).map(function(category) {
+                return capitalize(category.toLowerCase());
+              }));
             }
-            // init `methodNames` if it hasn't been inited
             if (!methodNames) {
-              methodNames = allMethods.slice();
+              methodNames = lodashMethods.slice();
             }
-            if (/plus/.test(command)) {
-              methodNames = methodNames.concat(command.match(/plus=(\S*)/)[1].split(/, */));
+            if (/\bplus=/.test(command)) {
+              methodNames = methodNames.concat(command.match(/\bplus=(\S*)/)[1].split(/, */));
             }
-            if (/minus/.test(command)) {
-              methodNames = _.without.apply(_, [methodNames]
-                .concat(expandMethodNames(command.match(/minus=(\S*)/)[1].split(/, */))));
+            if (/\bminus=/.test(command)) {
+              methodNames = _.without.apply(_, [methodNames].concat(expandMethodNames(command.match(/\bminus=(\S*)/)[1].split(/, */))));
             }
-            if (/exclude/.test(command)) {
-              methodNames = _.without.apply(_, [methodNames]
-                .concat(expandMethodNames(command.match(/exclude=(\S*)/)[1].split(/, */))));
+            if (/\bexclude=/.test(command)) {
+              methodNames = _.without.apply(_, [methodNames].concat(expandMethodNames(command.match(/\bexclude=(\S*)/)[1].split(/, */))));
             }
 
-            // expand aliases and categories to real method names
-            methodNames = expandMethodNames(methodNames).reduce(function(result, methodName) {
-              return result.concat(methodName, getMethodsByCategory(methodName));
-            }, []);
+            // expand categories to real method names
+            methodNames.slice().forEach(function(category) {
+              var result = getMethodsByCategory(category);
 
-            // remove nonexistent and duplicate method names
+              // limit category methods to those available for specific builds
+              result = result.filter(function(methodName) {
+                return _.contains(
+                  isBackbone ? backboneDependencies :
+                  isUnderscore ? underscoreMethods :
+                  lodashMethods, methodName
+                );
+              });
+              if (result.length) {
+                methodNames = _.without(methodNames, category);
+                push.apply(methodNames, result);
+              }
+            });
+
+            // expand aliases and remove nonexistent and duplicate method names
             methodNames = _.uniq(_.intersection(allMethods, expandMethodNames(methodNames)));
 
             if (!exposeAssign) {
               methodNames = _.without(methodNames, 'assign');
+            }
+            if (!exposeZipObject) {
+              methodNames = _.without(methodNames, 'zipObject');
             }
             var lodash = context._ || {};
             methodNames.forEach(function(methodName) {
@@ -1196,11 +1697,11 @@
 
   /*--------------------------------------------------------------------------*/
 
-  if (isFinite(timeLimit)) {
-    setTimeout(process.exit, timeLimit * 6e4);
+  if (timeLimit > 0) {
+    setTimeout(function() {
+      process.exit(QUnit.config.stats.bad ? 1 : 0);
+    }, timeLimit);
   }
-  // explicitly call `QUnit.start()` for Narwhal, Node.js, Rhino, and RingoJS
-  if (!global.document) {
-    QUnit.start();
-  }
+  QUnit.config.noglobals = true;
+  QUnit.start();
 }());

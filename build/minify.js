@@ -2,23 +2,27 @@
 ;(function() {
   'use strict';
 
-  /** Load Node modules */
-  var fs = require('fs'),
+  /** Load Node.js modules */
+  var cp = require('child_process'),
       https = require('https'),
-      path = require('path'),
-      spawn = require('child_process').spawn,
-      tar = require('../vendor/tar/tar.js'),
       zlib = require('zlib');
 
   /** Load other modules */
-  var preprocess = require('./pre-compile.js'),
-      postprocess = require('./post-compile.js');
+  var _ = require('../lodash.js'),
+      preprocess = require('./pre-compile.js'),
+      postprocess = require('./post-compile.js'),
+      tar = require('../vendor/tar/tar.js'),
+      util = require('./util.js');
+
+  /** Module shortcuts */
+  var fs = util.fs,
+      path = util.path;
 
   /** The Git object ID of `closure-compiler.tar.gz` */
-  var closureId = 'c92fd8f7f2b2096eb910c99d10ede0ec25d3c3cc';
+  var closureId = '9fd5d61c1b706e7505aeb5187941c2c5497e5fd8';
 
   /** The Git object ID of `uglifyjs.tar.gz` */
-  var uglifyId = '577c2dfdf72c0310d2a560976696c07894943079';
+  var uglifyId = '7de2795a3af58d1b293e3b0e83cdbc994f4941dc';
 
   /** The path of the directory that is the base of the repository */
   var basePath = fs.realpathSync(path.join(__dirname, '..'));
@@ -37,6 +41,9 @@
 
   /** The media type for raw blob data */
   var mediaType = 'application/vnd.github.v3.raw';
+
+  /** Used to detect the Node.js executable in command-line arguments */
+  var reNode = RegExp('(?:^|' + path.sepEscaped + ')node(?:\\.exe)?$');
 
   /** Used to reference parts of the blob href */
   var location = (function() {
@@ -58,9 +65,6 @@
     'advanced': 'ADVANCED_OPTIMIZATIONS'
   };
 
-  /** Reassign `existsSync` for older versions of Node */
-  fs.existsSync || (fs.existsSync = path.existsSync);
-
   /*--------------------------------------------------------------------------*/
 
   /**
@@ -80,7 +84,12 @@
    *  onComplete - The function called once minification has finished.
    */
   function minify(source, options) {
+    // used to specify the source map URL
+    var sourceMapURL;
+
+    // used to specify the default minifer modes
     var modes = ['simple', 'advanced', 'hybrid'];
+
     source || (source = '');
     options || (options = {});
 
@@ -89,10 +98,39 @@
       // convert commands to an options object
       options = source;
 
+      // used to report invalid command-line arguments
+      var invalidArgs = _.reject(options.slice(reNode.test(options[0]) ? 2 : 0), function(value, index, options) {
+        if (/^(?:-o|--output)$/.test(options[index - 1]) ||
+            /^modes=.*$/.test(value)) {
+          return true;
+        }
+        var result = [
+          '-o', '--output',
+          '-p', '--source-map',
+          '-s', '--silent',
+          '-t', '--template'
+        ].indexOf(value) > -1;
+
+        if (!result && /^(?:-p|--source-map)$/.test(options[index - 1])) {
+          result = true;
+          sourceMapURL = value;
+        }
+        return result;
+      });
+
+      // report invalid arguments
+      if (invalidArgs.length) {
+        console.log(
+          '\n' +
+          'Invalid argument' + (invalidArgs.length > 1 ? 's' : '') +
+          ' passed: ' + invalidArgs.join(', ')
+        );
+        return;
+      }
       var filePath = options[options.length - 1],
-          isMapped = options.indexOf('-p') > -1 || options.indexOf('--source-map') > -1,
-          isSilent = options.indexOf('-s') > -1 || options.indexOf('--silent') > -1,
-          isTemplate = options.indexOf('-t') > -1 || options.indexOf('--template') > -1,
+          isMapped = _.contains(options, '-p') || _.contains(options, '--source-map'),
+          isSilent = _.contains(options, '-s') || _.contains(options, '--silent'),
+          isTemplate = _.contains(options, '-t') || _.contains(options, '--template'),
           outputPath = path.join(path.dirname(filePath), path.basename(filePath, '.js') + '.min.js');
 
       modes = options.reduce(function(result, value) {
@@ -103,7 +141,9 @@
       outputPath = options.reduce(function(result, value, index) {
         if (/-o|--output/.test(value)) {
           result = options[index + 1];
-          result = path.join(fs.realpathSync(path.dirname(result)), path.basename(result));
+          var dirname = path.dirname(result);
+          fs.mkdirpSync(dirname);
+          result = path.join(fs.realpathSync(dirname), path.basename(result));
         }
         return result;
       }, outputPath);
@@ -114,7 +154,8 @@
         'isSilent': isSilent,
         'isTemplate': isTemplate,
         'modes': modes,
-        'outputPath': outputPath
+        'outputPath': outputPath,
+        'sourceMapURL': sourceMapURL
       };
 
       source = fs.readFileSync(filePath, 'utf8');
@@ -186,6 +227,7 @@
     this.isSilent = !!options.isSilent;
     this.isTemplate = !!options.isTemplate;
     this.outputPath = options.outputPath;
+    this.sourceMapURL = options.sourceMapURL;
 
     var modes = this.modes = options.modes;
     source = this.source = preprocess(source, options);
@@ -201,9 +243,9 @@
     };
 
     // begin the minification process
-    if (modes.indexOf('simple') > -1) {
+    if (_.contains(modes, 'simple')) {
       closureCompile.call(this, source, 'simple', onClosureSimpleCompile.bind(this));
-    } else if (modes.indexOf('advanced') > -1) {
+    } else if (_.contains(modes, 'advanced')) {
       onClosureSimpleGzip.call(this);
     } else {
       onClosureAdvancedGzip.call(this);
@@ -268,7 +310,10 @@
         // containing Base64-encoded blob data. Overriding the `Accept` header
         // with the GitHub raw media type returns the blob data directly.
         // See http://developer.github.com/v3/media/.
-        'Accept': mediaType
+        'Accept': mediaType,
+        // As of 2013-04-24, the GitHub API mandates the `User-Agent` header
+        // for all requests.
+        'User-Agent': 'Lo-Dash/' + _.VERSION
       }
     }, function(response) {
       var decompressor = zlib.createUnzip(),
@@ -276,6 +321,30 @@
 
       parser.on('end', callback);
       response.pipe(decompressor).pipe(parser);
+    });
+  }
+
+  /**
+   * Retrieves the Java command-line options used for faster minification by
+   * the Closure Compiler, invoking the `callback` when finished. Subsequent
+   * calls will lazily return the previously retrieved options. The `callback`
+   * is invoked with one argument; (options).
+   *
+   * See https://code.google.com/p/closure-compiler/wiki/FAQ#What_are_the_recommended_Java_VM_command-line_options?.
+   *
+   * @private
+   * @param {Function} callback The function called once the options have been retrieved.
+   */
+  function getJavaOptions(callback) {
+    var result = [];
+    cp.exec('java -version -client -d32', function(error) {
+      if (!error && process.platform != 'win32') {
+        result.push('-client', '-d32');
+      }
+      getJavaOptions = function(callback) {
+        _.defer(callback, result);
+      };
+      callback(result);
     });
   }
 
@@ -305,9 +374,12 @@
     var filePath = this.filePath,
         isAdvanced = mode == 'advanced',
         isMapped = this.isMapped,
-        mapPath = getMapPath(outputPath),
+        isSilent = this.isSilent,
+        isTemplate = this.isTemplate,
         options = closureOptions.slice(),
-        outputPath = this.outputPath;
+        outputPath = this.outputPath,
+        mapPath = getMapPath(outputPath),
+        sourceMapURL = this.sourceMapURL || path.basename(mapPath);
 
     // remove copyright header to make other modifications easier
     var license = (/^(?:\s*\/\/.*\s*|\s*\/\*[^*]*\*+(?:[^\/][^*]*\*+)*\/\s*)*/.exec(source) || [''])[0];
@@ -315,7 +387,7 @@
       source = source.replace(license, '');
     }
 
-    var hasIIFE = /^;?\(function[^{]+{\s*/.test(source),
+    var hasIIFE = /^;?\(function[^{]+{/.test(source),
         isStrict = hasIIFE && /^;?\(function[^{]+{\s*["']use strict["']/.test(source);
 
     // to avoid stripping the IIFE, convert it to a function call
@@ -329,59 +401,63 @@
     if (isMapped) {
       options.push('--create_source_map=' + mapPath, '--source_map_format=V3');
     }
-
-    var compiler = spawn('java', ['-jar', closurePath].concat(options));
-    if (!this.isSilent) {
-      console.log('Compressing ' + path.basename(outputPath, '.js') + ' using the Closure Compiler (' + mode + ')...');
+    if (isTemplate) {
+      options.push('--charset=UTF-8');
     }
 
-    var error = '';
-    compiler.stderr.on('data', function(data) {
-      error += data;
+    getJavaOptions(function(javaOptions) {
+      var compiler = cp.spawn('java', javaOptions.concat('-jar', closurePath, options));
+      if (!isSilent) {
+        console.log('Compressing ' + path.basename(outputPath, '.js') + ' using the Closure Compiler (' + mode + ')...');
+      }
+
+      var error = '';
+      compiler.stderr.on('data', function(data) {
+        error += data;
+      });
+
+      var output = '';
+      compiler.stdout.on('data', function(data) {
+        output += data;
+      });
+
+      compiler.on('exit', function(status) {
+        // `status` contains the process exit code
+        if (status) {
+          var exception = new Error(error);
+          exception.status = status;
+        }
+        // restore IIFE and move exposed vars inside the IIFE
+        if (hasIIFE && isAdvanced) {
+          output = output
+            .replace(/__iife__\(/, '(')
+            .replace(/,\s*this\)([\s;]*(\n\/\/.+)?)$/, '(this))$1')
+            .replace(/^((?:var (?:\w+=(?:!0|!1|null)[,;])+)?)([\s\S]*?function[^{]+{)/, '$2$1');
+        }
+        // inject "use strict" directive
+        if (isStrict) {
+          output = output.replace(/^[\s\S]*?function[^{]+{/, '$&"use strict";');
+        }
+        // restore copyright header
+        if (license) {
+          output = license + output;
+        }
+        if (isMapped) {
+          var mapOutput = fs.readFileSync(mapPath, 'utf8');
+          fs.unlinkSync(mapPath);
+          output = output.replace(/[\s;]*$/, '\n/*\n//@ sourceMappingURL=' + sourceMapURL) + '\n*/';
+
+          mapOutput = JSON.parse(mapOutput);
+          mapOutput.file = path.basename(outputPath);
+          mapOutput.sources = [path.basename(filePath)];
+          mapOutput = JSON.stringify(mapOutput, null, 2);
+        }
+        callback(exception, output, mapOutput);
+      });
+
+      // proxy the standard input to the Closure Compiler
+      compiler.stdin.end(source);
     });
-
-    var output = '';
-    compiler.stdout.on('data', function(data) {
-      output += data;
-    });
-
-    compiler.on('exit', function(status) {
-      // `status` contains the process exit code
-      if (status) {
-        var exception = new Error(error);
-        exception.status = status;
-      }
-      // restore IIFE and move exposed vars inside the IIFE
-      if (hasIIFE && isAdvanced) {
-        output = output
-          .replace(/__iife__\(/, '(')
-          .replace(/,\s*this\)([\s;]*(\n\/\/.+)?)$/, '(this))$1')
-          .replace(/^((?:var (?:\w+=(?:!0|!1|null)[,;])+)?)([\s\S]*?function[^{]+{)/, '$2$1');
-      }
-      // inject "use strict" directive
-      if (isStrict) {
-        output = output.replace(/^[\s\S]*?function[^{]+{/, '$&"use strict";');
-      }
-      // restore copyright header
-      if (license) {
-        output = license + output;
-      }
-      if (isMapped) {
-        var mapOutput = fs.readFileSync(mapPath, 'utf8');
-        fs.unlinkSync(mapPath);
-
-        output = output
-          .replace(/[\s;]*$/, '\n/*\n//@ sourceMappingURL=' + path.basename(mapPath)) + '\n*/';
-
-        mapOutput = mapOutput
-          .replace(/("file":)""/, '$1"' + path.basename(outputPath) + '"')
-          .replace(/("sources":)\["stdin"\]/, '$1["' + path.basename(filePath) + '"]');
-      }
-      callback(exception, output, mapOutput);
-    });
-
-    // proxy the standard input to the Closure Compiler
-    compiler.stdin.end(source);
   }
 
   /**
@@ -409,6 +485,7 @@
       toplevel.figure_out_scope();
       toplevel = toplevel.transform(uglifyJS.Compressor({
         'comparisons': false,
+        'unsafe': true,
         'unsafe_comps': true,
         'warnings': false
       }));
@@ -424,7 +501,7 @@
       // 4. output
       // restrict lines to 500 characters for consistency with the Closure Compiler
       var stream = uglifyJS.OutputStream({
-        'ascii_only': true,
+        'ascii_only': !this.isTemplate,
         'comments': /@cc_on|@license|@preserve/i,
         'max_line_len': 500,
       });
@@ -477,7 +554,7 @@
       this.compiled.simple.gzip = result;
     }
     // compile the source using advanced optimizations
-    if (this.modes.indexOf('advanced') > -1) {
+    if (_.contains(this.modes, 'advanced')) {
       closureCompile.call(this, this.source, 'advanced', onClosureAdvancedCompile.bind(this));
     } else {
       onClosureAdvancedGzip.call(this);
@@ -564,10 +641,10 @@
     }
     // minify the already Closure Compiler simple optimized source using UglifyJS
     var modes = this.modes;
-    if (modes.indexOf('hybrid') > -1) {
-      if (modes.indexOf('simple') > -1) {
+    if (_.contains(modes, 'hybrid')) {
+      if (_.contains(modes, 'simple')) {
         uglify.call(this, this.compiled.simple.source, 'hybrid (simple)', onSimpleHybrid.bind(this));
-      } else if (modes.indexOf('advanced') > -1) {
+      } else if (_.contains(modes, 'advanced')) {
         onSimpleHybridGzip.call(this);
       }
     } else {
@@ -609,7 +686,7 @@
       this.hybrid.simple.gzip = result;
     }
     // minify the already Closure Compiler advance optimized source using UglifyJS
-    if (this.modes.indexOf('advanced') > -1) {
+    if (_.contains(this.modes, 'advanced')) {
       uglify.call(this, this.compiled.advanced.source, 'hybrid (advanced)', onAdvancedHybrid.bind(this));
     } else {
       onComplete.call(this);

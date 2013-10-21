@@ -1,23 +1,28 @@
-# Lo-Dash <sup>v1.0.0-rc.3</sup>
-[![build status](https://secure.travis-ci.org/bestiejs/lodash.png)](http://travis-ci.org/bestiejs/lodash)
+# Lo-Dash <sup>v1.3.1</sup>
 
-An alternative to Underscore.js, delivering consistency, [customization](https://github.com/bestiejs/lodash#custom-builds), [performance](http://lodash.com/benchmarks), and [extra features](https://github.com/bestiejs/lodash#features).
+A low-level utility library delivering consistency, [customization](https://github.com/bestiejs/lodash#custom-builds), [performance](http://lodash.com/benchmarks), and [extra features](https://github.com/bestiejs/lodash#features).
 
 ## Download
 
-* Lo-Dash builds:<br>
-[Development](https://raw.github.com/bestiejs/lodash/v1.0.0-rc.3/lodash.js) and
-[Production](https://raw.github.com/bestiejs/lodash/v1.0.0-rc.3/lodash.min.js)
+* Lo-Dash builds (for modern environments):<br>
+[Development](https://raw.github.com/bestiejs/lodash/v1.3.1/dist/lodash.js) and
+[Production](https://raw.github.com/bestiejs/lodash/v1.3.1/dist/lodash.min.js)
+
+* Lo-Dash compatibility builds (for legacy and modern environments):<br>
+[Development](https://raw.github.com/bestiejs/lodash/v1.3.1/dist/lodash.compat.js) and
+[Production](https://raw.github.com/bestiejs/lodash/v1.3.1/dist/lodash.compat.min.js)
 
 * Underscore compatibility builds:<br>
-[Development](https://raw.github.com/bestiejs/lodash/v1.0.0-rc.3/lodash.underscore.js) and
-[Production](https://raw.github.com/bestiejs/lodash/v1.0.0-rc.3/lodash.underscore.min.js)
+[Development](https://raw.github.com/bestiejs/lodash/v1.3.1/dist/lodash.underscore.js) and
+[Production](https://raw.github.com/bestiejs/lodash/v1.3.1/dist/lodash.underscore.min.js)
 
-* CDN copies of ≤ v1.0.0-rc.3’s builds are available on [cdnjs](http://cdnjs.com/) thanks to [CloudFlare](http://www.cloudflare.com/):<br>
-[Lo-Dash dev](http://cdnjs.cloudflare.com/ajax/libs/lodash.js/1.0.0-rc.3/lodash.js),
-[Lo-Dash prod](http://cdnjs.cloudflare.com/ajax/libs/lodash.js/1.0.0-rc.3/lodash.min.js),
-[Underscore compat-dev](http://cdnjs.cloudflare.com/ajax/libs/lodash.js/1.0.0-rc.3/lodash.underscore.js), and
-[Underscore compat-prod](http://cdnjs.cloudflare.com/ajax/libs/lodash.js/1.0.0-rc.3/lodash.underscore.min.js)
+* CDN copies of ≤ v1.3.1’s builds are available on [cdnjs](http://cdnjs.com/) thanks to [CloudFlare](http://www.cloudflare.com/):<br>
+[Lo-Dash dev](http://cdnjs.cloudflare.com/ajax/libs/lodash.js/1.3.1/lodash.js),
+[Lo-Dash prod](http://cdnjs.cloudflare.com/ajax/libs/lodash.js/1.3.1/lodash.min.js),<br>
+[Lo-Dash compat-dev](http://cdnjs.cloudflare.com/ajax/libs/lodash.js/1.3.1/lodash.compat.js),
+[Lo-Dash compat-prod](http://cdnjs.cloudflare.com/ajax/libs/lodash.js/1.3.1/lodash.compat.min.js),<br>
+[Underscore compat-dev](http://cdnjs.cloudflare.com/ajax/libs/lodash.js/1.3.1/lodash.underscore.js), and
+[Underscore compat-prod](http://cdnjs.cloudflare.com/ajax/libs/lodash.js/1.3.1/lodash.underscore.min.js)
 
 * For optimal file size, [create a custom build](https://github.com/bestiejs/lodash#custom-builds) with only the features you need
 
@@ -27,61 +32,78 @@ We’ve got [API docs](http://lodash.com/docs), [benchmarks](http://lodash.com/b
 
 For a list of upcoming features, check out our [roadmap](https://github.com/bestiejs/lodash/wiki/Roadmap).
 
-## Screencasts
+## Resources
 
-For more information check out these screencasts over Lo-Dash:
+For more information check out these articles, screencasts, and other videos over Lo-Dash:
 
- * [Introducing Lo-Dash](https://vimeo.com/44154599)
- * [Lo-Dash optimizations and custom builds](https://vimeo.com/44154601)
- * [Lo-Dash’s origin and why it’s a better utility belt](https://vimeo.com/44154600)
- * [Unit testing in Lo-Dash](https://vimeo.com/45865290)
- * [Lo-Dash’s approach to native method use](https://vimeo.com/48576012)
- * [CascadiaJS: Lo-Dash for a better utility belt](http://www.youtube.com/watch?v=dpPy4f_SeEk)
+ * Posts
+  - [Say “Hello” to Lo-Dash](http://kitcambridge.be/blog/say-hello-to-lo-dash/)
+
+ * Videos
+  - [Introducing Lo-Dash](https://vimeo.com/44154599)
+  - [Lo-Dash optimizations and custom builds](https://vimeo.com/44154601)
+  - [Lo-Dash’s origin and why it’s a better utility belt](https://vimeo.com/44154600)
+  - [Unit testing in Lo-Dash](https://vimeo.com/45865290)
+  - [Lo-Dash’s approach to native method use](https://vimeo.com/48576012)
+  - [CascadiaJS: Lo-Dash for a better utility belt](http://www.youtube.com/watch?v=dpPy4f_SeEk)
 
 ## Features
 
  * AMD loader support ([RequireJS](http://requirejs.org/), [curl.js](https://github.com/cujojs/curl), etc.)
  * [_(…)](http://lodash.com/docs#_) supports intuitive chaining
+ * [_.at](http://lodash.com/docs#at) for cherry-picking collection values
  * [_.bindKey](http://lodash.com/docs#bindKey) for binding [*“lazy”* defined](http://michaux.ca/articles/lazy-function-definition-pattern) methods
- * [_.cloneDeep](http://lodash.com/docs#cloneDeep) for *“deep”* cloning arrays and objects
+ * [_.cloneDeep](http://lodash.com/docs#cloneDeep) for deep cloning arrays and objects
  * [_.contains](http://lodash.com/docs#contains) accepts a `fromIndex` argument
+ * [_.debounce](http://lodash.com/docs#debounce) and [_.throttle](http://lodash.com/docs#throttle) accept an `options` argument for more control
+ * [_.createCallback](http://lodash.com/docs#createCallback) to customize how callback arguments are handled and support callback shorthands in mixins
+ * [_.findIndex](http://lodash.com/docs#findIndex) and [_.findKey](http://lodash.com/docs#findKey) for finding indexes and keys of collections
  * [_.forEach](http://lodash.com/docs#forEach) is chainable and supports exiting iteration early
  * [_.forIn](http://lodash.com/docs#forIn) for iterating over an object’s own and inherited properties
  * [_.forOwn](http://lodash.com/docs#forOwn) for iterating over an object’s own properties
  * [_.isPlainObject](http://lodash.com/docs#isPlainObject) checks if values are created by the `Object` constructor
- * [_.merge](http://lodash.com/docs#merge) for a *“deep”* [_.extend](http://lodash.com/docs#extend)
- * [_.partial](http://lodash.com/docs#partial) for partial application without `this` binding
- * [_.pick](http://lodash.com/docs#pick) and [_.omit](http://lodash.com/docs#omit) accepts `callback` and `thisArg` arguments
- * [_.template](http://lodash.com/docs#template) supports [ES6 template delimiters](http://people.mozilla.org/~jorendorff/es6-draft.html#sec-7.8.6) and utilizes [sourceURLs](http://www.html5rocks.com/en/tutorials/developertools/sourcemaps/#toc-sourceurl) for easier debugging
+ * [_.merge](http://lodash.com/docs#merge) for a deep [_.extend](http://lodash.com/docs#extend)
+ * [_.parseInt](http://lodash.com/docs#parseInt) for consistent cross-environment behavior
+ * [_.partial](http://lodash.com/docs#partial) and [_.partialRight](http://lodash.com/docs#partialRight) for partial application without `this` binding
+ * [_.runInContext](http://lodash.com/docs#runInContext) for easier mocking and extended environment support
+ * [_.support](http://lodash.com/docs#support) to flag environment features
+ * [_.template](http://lodash.com/docs#template) supports [*“imports”* options](http://lodash.com/docs#templateSettings_imports), [ES6 template delimiters](http://people.mozilla.org/~jorendorff/es6-draft.html#sec-7.8.6), and [sourceURLs](http://www.html5rocks.com/en/tutorials/developertools/sourcemaps/#toc-sourceurl)
+ * [_.transform](http://lodash.com/docs#transform) as a powerful alternative to [_.reduce](http://lodash.com/docs#reduce) for transforming objects
+ * [_.unzip](http://lodash.com/docs#unzip) as the inverse of [_.zip](http://lodash.com/docs#zip)
+ * [_.where](http://lodash.com/docs#where) supports deep object comparisons
+ * [_.clone](http://lodash.com/docs#clone), [_.omit](http://lodash.com/docs#omit), [_.pick](http://lodash.com/docs#pick),
+   [and more…](http://lodash.com/docs "_.assign, _.cloneDeep, _.first, _.initial, _.isEqual, _.last, _.merge, _.rest") accept `callback` and `thisArg` arguments
  * [_.contains](http://lodash.com/docs#contains), [_.size](http://lodash.com/docs#size), [_.toArray](http://lodash.com/docs#toArray),
-   [and more…](http://lodash.com/docs "_.countBy, _.every, _.filter, _.find, _.forEach, _.groupBy, _.invoke, _.map, _.max, _.min, _.pluck, _.reduce, _.reduceRight, _.reject, _.shuffle, _.some, _.sortBy, _.where") accept strings
+   [and more…](http://lodash.com/docs "_.at, _.countBy, _.every, _.filter, _.find, _.forEach, _.groupBy, _.invoke, _.map, _.max, _.min, _.pluck, _.reduce, _.reduceRight, _.reject, _.shuffle, _.some, _.sortBy, _.where") accept strings
+ * [_.filter](http://lodash.com/docs#filter), [_.find](http://lodash.com/docs#find), [_.map](http://lodash.com/docs#map),
+   [and more…](http://lodash.com/docs "_.countBy, _.every, _.first, _.groupBy, _.initial, _.last, _.max, _.min, _.reject, _.rest, _.some, _.sortBy, _.sortedIndex, _.uniq") support *“_.pluck”* and *“_.where”* `callback` shorthands
 
 ## Support
 
-Lo-Dash has been tested in at least Chrome 5~24, Firefox 1~18, IE 6-10, Opera 9.25-12, Safari 3-6, Node.js 0.4.8-0.8.17, Narwhal 0.3.2, RingoJS 0.8, and Rhino 1.7RC5.
+Lo-Dash has been tested in at least Chrome 5~27, Firefox 2~21, IE 6-10, Opera 9.25~12, Safari 3-6, Node.js 0.4.8-0.10.7 (Node bug [#5622](https://github.com/joyent/node/issues/5622) prevents 0.10.8-0.10.10 from working), Narwhal 0.3.2, PhantomJS 1.9.0, RingoJS 0.9, and Rhino 1.7RC5.
 
 ## Custom builds
 
 Custom builds make it easy to create lightweight versions of Lo-Dash containing only the methods you need.
 To top it off, we handle all method dependency and alias mapping for you.
+For a more detailed summary over the differences between various builds, check out the [wiki page](https://github.com/bestiejs/lodash/wiki/build-differences).
 
  * Backbone builds, with only methods required by Backbone, may be created using the `backbone` modifier argument.
 ```bash
 lodash backbone
 ```
 
- * CSP builds, supporting default [Content Security Policy](http://dvcs.w3.org/hg/content-security-policy/raw-file/tip/csp-specification.dev.html) restrictions, may be created using the `csp` modifier argument.
-   The `csp` modifier is an alais of the `mobile` modifier. Chrome extensions will require [sandboxing](http://developer.chrome.com/extensions/sandboxingEval.html) or the use of either the `csp`, `mobile`, or `underscore` build.
-```bash
-lodash csp
-```
-
- * Legacy builds, tailored for older browsers without [ES5 support](http://es5.github.com/), may be created using the `legacy` modifier argument.
+ * Legacy builds, tailored for older environments without [ES5 support](http://es5.github.com/), may be created using the `legacy` modifier argument.
 ```bash
 lodash legacy
 ```
 
- * Mobile builds, with IE < 9 bug fixes and method compilation removed, may be created using the `mobile` modifier argument.
+ * Modern builds, tailored for newer environments with ES5 support, may be created using the `modern` modifier argument.
+```bash
+lodash modern
+```
+
+ * Mobile builds, without method compilation and most bug fixes for old browsers, may be created using the `mobile` modifier argument.
 ```bash
 lodash mobile
 ```
@@ -150,7 +172,7 @@ lodash settings="{interpolate:/\{\{([\s\S]+?)\}\}/g}"
 lodash moduleId="underscore"
 ```
 
-All arguments, except `legacy` with `csp` or `mobile`, may be combined.<br>
+All arguments, except `legacy` with `mobile`, `modern`, or `underscore`, may be combined.<br>
 Unless specified by `-o` or `--output`, all files created are saved to the current working directory.
 
 The following options are also supported:
@@ -160,7 +182,7 @@ The following options are also supported:
  * `-h`, `--help` ............. Display help information
  * `-m`, `--minify` ......... Write only the minified production output
  * `-o`, `--output` ......... Write output to a given path/filename
- * `-p`, `--source-map` .. Generate a source map for the minified output
+ * `-p`, `--source-map` .. Generate a source map for the minified output, using an optional source map URL
  * `-s`, `--silent` ......... Skip status updates normally logged to the console
  * `-V`, `--version` ....... Output current version of Lo-Dash
 
@@ -189,18 +211,18 @@ To avoid potential issues, update `npm` before installing Lo-Dash:
 npm install npm -g
 ```
 
-In [Node.js](http://nodejs.org/) and [RingoJS v0.8.0+](http://ringojs.org/):
+In [Node.js](http://nodejs.org/) and [RingoJS ≥ v0.8.0](http://ringojs.org/):
 
 ```js
 var _ = require('lodash');
 
 // or as a drop-in replacement for Underscore
-var _ = require('lodash/lodash.underscore');
+var _ = require('lodash/dist/lodash.underscore');
 ```
 
 **Note:** If Lo-Dash is installed globally, run [`npm link lodash`](http://blog.nodejs.org/2011/03/23/npm-1-0-global-vs-local-installation/) in your project’s root directory before requiring it.
 
-In [RingoJS v0.7.0-](http://ringojs.org/):
+In [RingoJS ≤ v0.7.0](http://ringojs.org/):
 
 ```js
 var _ = require('lodash')._;
@@ -227,64 +249,61 @@ require({
 
 ## Release Notes
 
-### <sup>v1.0.0-rc.3</sup>
+### <sup>v1.3.1</sup>
 
-#### Compatibility Warnings
+ * Added missing `cache` property to the objects returned by `getObject`
+ * Ensured `maxWait` unit tests pass in Ringo
+ * Increased the `maxPoolSize` value
+ * Optimized `releaseArray` and `releaseObject`
 
- * Made `_#join`, `_#pop`, and `_#shift` wrapper methods return unwrapped values
- * Made *“Functions”* methods wrapper counterparts return wrapped values
- * Removed `_.chain` and `_#chain` methods
+### <sup>v1.3.0</sup>
 
-#### Changes
-
- * Added [_.cloneDeep](http://lodash.com/docs#cloneDeep) alias of `_.clone(…, true)`
- * Added `_.once` to the `backbone` build method dependencies
- * Ensured `backbone` builds implement Underscore’s chaining behavior
- * Ensured the `settings=…` build option doesn’t clobber the default `moduleId`
- * Ensured Lo-Dash’s `npm` package installation avoids erroring when no other modules have been globally installed
- * Made compiled templates loaded via AMD use the Lo-Dash module for their `_` references
- * Removed the *“Collections”* method `_.forEach` dependency from *“Arrays”* method `_.intersection`
- * Optimized `_.isArray` and `_.isFunction` fallbacks as well as<br>
-   `_.intersection`, `_.isDate`, `_.isRegExp`, `_.reduce`, `_.reduceRight`, `_.union`, and `_.uniq`
-
-### <sup>v1.0.0-rc.2</sup>
-
- * Specified more method chaining behaviors
- * Updated `underscore` build compatibility to v1.4.3
-
-### <sup>v1.0.0-rc.1</sup>
-
-#### Compatibility Warnings
-
- * Made `_(…)` intuitively chain without needing to call `_#chain`
- * Made `_.isEqual` equate `arguments` objects to similar `Object` objects
- * Made `_.clone` copy the enumerable properties of `arguments` objects and objects<br>
-   created by constructors other than `Object` are cloned to plain `Object` objects
-
-#### Changes
-
- * Ensure Lo-Dash runs in the JS engine embedded in Adobe products
- * Ensured `_.reduce` and `_.reduceRight` pass the correct number of `callback` arguments
- * Ensured `_.throttle` nulls the `timeoutId`
- * Made deep `_.clone` more closely follow the structured clone algorithm and copy array properties assigned by `RegExp#exec`
- * Optimized compiled templates in Firefox
- * Optimized `_.forEach`, `_.forOwn`, `_.isNumber`, and `_.isString`
- * Simplified `iteratorTemplate`
+ * Added `_.transform` method
+ * Added `_.chain` and `_.findWhere` aliases
+ * Added internal array and object pooling
+ * Added Istanbul test coverage reports to Travis CI
+ * Added `maxWait` option to `_.debounce`
+ * Added support for floating point numbers to `_.random`
+ * Added Volo configuration to package.json
+ * Adjusted UMD for `component build`
+ * Allowed more stable mixing of `lodash` and `underscore` build methods
+ * Ensured debounced function with, `leading` and `trailing` options, works as expected
+ * Ensured minified builds work with the Dojo builder
+ * Ensured minification avoids deoptimizing expressions containing boolean values
+ * Ensured unknown types return `false` in `_.isObject` and `_.isRegExp`
+ * Ensured `_.clone`, `_.flatten`, and `_.uniq` can be used as a `callback` for methods like `_.map`
+ * Ensured `_.forIn` works on objects with longer inheritance chains in IE < 9
+ * Ensured `_.isPlainObject` returns `true` for empty objects in IE < 9
+ * Ensured `_.max` and `_.min` chain correctly
+ * Ensured `clearTimeout` use doesn’t cause errors in Titanium
+ * Ensured that the `--stdout` build option doesn't write to a file
+ * Exposed memoized function’s `cache`
+ * Fixed `Error.prototype` iteration bugs
+ * Fixed "scripts" paths in component.json
+ * Made methods support customizing `_.indexOf`
+ * Made the build track dependencies of private functions
+ * Made the `template` pre-compiler build option avoid escaping non-ascii characters
+ * Made `_.createCallback` avoid binding functions if they don’t reference `this`
+ * Optimized the Closure Compiler minification process
+ * Optimized the large array cache for `_.difference`, `_.intersection`, and `_.uniq`
+ * Optimized internal `_.flatten` and `_.indexOf` use
+ * Reduced `_.unzip` and `_.zip`
+ * Removed special handling of arrays in `_.assign` and `_.defaults`
 
 The full changelog is available [here](https://github.com/bestiejs/lodash/wiki/Changelog).
 
 ## BestieJS
 
-Lo-Dash is part of the BestieJS *“Best in Class”* module collection. This means we promote solid browser/environment support, ES5 precedents, unit testing, and plenty of documentation.
+Lo-Dash is part of the BestieJS *“Best in Class”* module collection. This means we promote solid browser/environment support, ES5+ precedents, unit testing, and plenty of documentation.
 
 ## Author
 
-* [John-David Dalton](http://allyoucanleet.com/)
-  [![twitter/jdalton](http://gravatar.com/avatar/299a3d891ff1920b69c364d061007043?s=70)](https://twitter.com/jdalton "Follow @jdalton on Twitter")
+| [![twitter/jdalton](http://gravatar.com/avatar/299a3d891ff1920b69c364d061007043?s=70)](http://twitter.com/jdalton "Follow @jdalton on Twitter") |
+|---|
+| [John-David Dalton](http://allyoucanleet.com/) |
 
 ## Contributors
 
-* [Kit Cambridge](http://kitcambridge.github.com/)
-  [![twitter/kitcambridge](http://gravatar.com/avatar/6662a1d02f351b5ef2f8b4d815804661?s=70)](https://twitter.com/kitcambridge "Follow @kitcambridge on Twitter")
-* [Mathias Bynens](http://mathiasbynens.be/)
-  [![twitter/mathias](http://gravatar.com/avatar/24e08a9ea84deb17ae121074d0f17125?s=70)](https://twitter.com/mathias "Follow @mathias on Twitter")
+| [![twitter/kitcambridge](http://gravatar.com/avatar/6662a1d02f351b5ef2f8b4d815804661?s=70)](https://twitter.com/kitcambridge "Follow @kitcambridge on Twitter") | [![twitter/mathias](http://gravatar.com/avatar/24e08a9ea84deb17ae121074d0f17125?s=70)](http://twitter.com/mathias "Follow @mathias on Twitter") |
+|---|---|
+| [Kit Cambridge](http://kitcambridge.github.io/) | [Mathias Bynens](http://mathiasbynens.be/) |

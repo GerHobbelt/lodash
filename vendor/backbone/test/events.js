@@ -99,6 +99,11 @@ $(document).ready(function() {
     a.listenTo(b, 'event2', cb);
     a.stopListening(null, {event: cb});
     b.trigger('event event2');
+    b.off();
+    a.listenTo(b, 'event event2', cb);
+    a.stopListening(null, 'event');
+    a.stopListening();
+    b.trigger('event2');
   });
 
   test("listenToOnce and stopListening", 1, function() {
@@ -271,6 +276,13 @@ $(document).ready(function() {
 
   test("if no callback is provided, `on` is a noop", 0, function() {
     _.extend({}, Backbone.Events).on('test').trigger('test');
+  });
+
+  test("if callback is truthy but not a function, `on` should throw an error just like jQuery", 1, function() {
+    var view = _.extend({}, Backbone.Events).on('test', 'noop');
+    throws(function() {
+      view.trigger('test');
+    });
   });
 
   test("remove all events for a specific context", 4, function() {

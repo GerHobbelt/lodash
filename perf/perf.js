@@ -1,55 +1,91 @@
 (function(window) {
 
-  /** Use a single load function */
+  /** Use a single "load" function */
   var load = typeof require == 'function' ? require : window.load;
 
-  /** Load Benchmark.js */
-  var Benchmark =
-    window.Benchmark || (
-      Benchmark = load('../vendor/benchmark.js/benchmark.js') || window.Benchmark,
-      Benchmark.Benchmark || Benchmark
-    );
+  /** The file path of the Lo-Dash file to test */
+  var filePath = (function() {
+    var min = 0;
+    var result = window.phantom
+      ? phantom.args
+      : (window.system
+          ? (min = 1, system.args)
+          : (window.process ? (min = 2, process.argv) : (window.arguments || []))
+        );
+
+    var last = result[result.length - 1];
+    result = (result.length > min && !/perf(?:\.js)?$/.test(last))
+      ? last
+      : '../lodash.js';
+
+    try {
+      result = require('fs').realpathSync(result);
+    } catch(e) { }
+
+    return result;
+  }());
 
   /** Load Lo-Dash */
-  var lodash =
-    window.lodash || (
-      lodash = load('../lodash.js') || window._,
-      lodash = lodash._ || lodash,
-      lodash.noConflict()
-    );
+  var lodash = window.lodash || (window.lodash = (
+    lodash = load(filePath) || window._,
+    lodash = lodash._ || lodash,
+    lodash.noConflict()
+  ));
+
+  /** Load Benchmark.js */
+  var Benchmark = window.Benchmark || (window.Benchmark = (
+    Benchmark = load('../vendor/benchmark.js/benchmark.js') || window.Benchmark,
+    Benchmark = Benchmark.Benchmark || Benchmark,
+    Benchmark.runInContext(lodash.extend({}, window, { '_': lodash }))
+  ));
 
   /** Load Underscore */
-  var _ =
-    window._ || (
-      _ = load('../vendor/underscore/underscore.js') || window._,
-      _._ || _
-    );
+  var _ = window._ || (window._ = (
+    _ = load('../vendor/underscore/underscore.js') || window._,
+    _._ || _
+  ));
 
   /** Used to access the Firebug Lite panel (set by `run`) */
   var fbPanel;
 
+  /** Used to match path separators */
+  var rePathSeparator = /[\/\\]/;
+
+  /** Used to detect primitive types */
+  var rePrimitive = /^(?:boolean|number|string|undefined)$/;
+
+  /** Used to match RegExp special characters */
+  var reSpecialChars = /[.*+?^=!:${}()|[\]\/\\]/g;
+
   /** Used to score performance */
-  var score = { 'a': 0, 'b': 0 };
+  var score = { 'a': [], 'b': [] };
 
   /** Used to queue benchmark suites */
   var suites = [];
 
+  /** Used to resolve a value's internal [[Class]] */
+  var toString = Object.prototype.toString;
+
   /** The `ui` object */
-  var ui = window.ui || {};
+  var ui = window.ui || (window.ui = {
+    'buildPath': basename(filePath, '.js'),
+    'otherPath': 'underscore'
+  });
 
   /** The Lo-Dash build basename */
-  var buildName = basename(ui.buildPath || 'lodash', '.js');
+  var buildName = window.buildName = basename(ui.buildPath, '.js');
 
   /** The other library basename */
-  var otherName = basename(ui.otherPath || 'underscore', '.js');
+  var otherName = window.otherName = basename(ui.otherPath, '.js');
 
-  /** Add `console.log()` support for Narwhal and RingoJS */
-  window.console || (window.console = { 'log': window.print });
+  /** Detect if in a browser environment */
+  var isBrowser = isHostType(window, 'document') && isHostType(window, 'navigator');
 
-  /** Expose functions to the global object */
-  window._ = _;
-  window.Benchmark = Benchmark;
-  window.lodash = lodash;
+  /** Detect Java environment */
+  var isJava = !isBrowser && /Java/.test(toString.call(window.java));
+
+  /** Add `console.log()` support for Narwhal, Rhino, and RingoJS */
+  var console = window.console || (window.console = { 'log': window.print });
 
   /*--------------------------------------------------------------------------*/
 
@@ -63,10 +99,24 @@
    * @returns {String} Returns the basename.
    */
   function basename(filePath, extension) {
-    var result = (filePath || '').split(/[\\/]/).pop();
-    return arguments.length < 2
+    var result = (filePath || '').split(rePathSeparator).pop();
+    return (arguments.length < 2)
       ? result
-      : result.replace(RegExp(extension.replace(/[.*+?^=!:${}()|[\]\/\\]/g, '\\$&') + '$'), '');
+      : result.replace(RegExp(extension.replace(reSpecialChars, '\\$&') + '$'), '');
+  }
+
+  /**
+   * Computes the geometric mean (log-average) of an array of values.
+   * See http://en.wikipedia.org/wiki/Geometric_mean#Relationship_with_arithmetic_mean_of_logarithms.
+   *
+   * @private
+   * @param {Array} array The array of values.
+   * @returns {Number} The geometric mean.
+   */
+  function getGeometricMean(array) {
+    return Math.pow(Math.E, lodash.reduce(array, function(sum, x) {
+      return sum + Math.log(x);
+    }, 0) / array.length) || 0;
   }
 
   /**
@@ -80,6 +130,24 @@
   function getHz(bench) {
     var result = 1 / (bench.stats.mean + bench.stats.moe);
     return isFinite(result) ? result : 0;
+  }
+
+  /**
+   * Host objects can return type values that are different from their actual
+   * data type. The objects we are concerned with usually return non-primitive
+   * types of "object", "function", or "unknown".
+   *
+   * @private
+   * @param {Mixed} object The owner of the property.
+   * @param {String} property The property to check.
+   * @returns {Boolean} Returns `true` if the property value is a non-primitive, else `false`.
+   */
+  function isHostType(object, property) {
+    if (object == null) {
+      return false;
+    }
+    var type = typeof object[property];
+    return !rePrimitive.test(type) && (type != 'object' || !!object[property]);
   }
 
   /**
@@ -107,7 +175,7 @@
       fbPanel.getElementById('fbPanel1');
 
     log('\nSit back and relax, this may take a while.');
-    suites[0].run();
+    suites[0].run({ 'async': !isJava });
   }
 
   /*--------------------------------------------------------------------------*/
@@ -120,47 +188,59 @@
       log(event.target);
     },
     'onComplete': function() {
-      var formatNumber = Benchmark.formatNumber,
-          fastest = this.filter('fastest'),
-          fastestHz = getHz(fastest[0]),
-          slowest = this.filter('slowest'),
-          slowestHz = getHz(slowest[0]),
-          aHz = getHz(this[0]),
-          bHz = getHz(this[1]);
-
-      if (fastest.length > 1) {
-        log('It\'s too close to call.');
-        aHz = bHz = slowestHz;
+      for (var index = 0, length = this.length; index < length; index++) {
+        var bench = this[index];
+        if (bench.error) {
+          var errored = true;
+        }
+      }
+      if (errored) {
+        log('There was a problem, skipping...');
       }
       else {
-        var percent = ((fastestHz / slowestHz) - 1) * 100;
+        var formatNumber = Benchmark.formatNumber,
+            fastest = this.filter('fastest'),
+            fastestHz = getHz(fastest[0]),
+            slowest = this.filter('slowest'),
+            slowestHz = getHz(slowest[0]),
+            aHz = getHz(this[0]),
+            bHz = getHz(this[1]);
 
-        log(
-          fastest[0].name + ' is ' +
-          formatNumber(percent < 1 ? percent.toFixed(2) : Math.round(percent)) +
-          '% faster.'
-        );
+        if (fastest.length > 1) {
+          log('It\'s too close to call.');
+          aHz = bHz = slowestHz;
+        }
+        else {
+          var percent = ((fastestHz / slowestHz) - 1) * 100;
+
+          log(
+            fastest[0].name + ' is ' +
+            formatNumber(percent < 1 ? percent.toFixed(2) : Math.round(percent)) +
+            '% faster.'
+          );
+        }
+        // add score adjusted for margin of error
+        score.a.push(aHz);
+        score.b.push(bHz);
       }
-      // add score adjusted for margin of error
-      score.a += aHz;
-      score.b += bHz;
-
       // remove current suite from queue
       suites.shift();
 
       if (suites.length) {
         // run next suite
-        suites[0].run();
+        suites[0].run({ 'async': !isJava });
       }
       else {
-        var fastestTotalHz = Math.max(score.a, score.b),
-            slowestTotalHz = Math.min(score.a, score.b),
-            totalPercent = formatNumber(Math.round(((fastestTotalHz  / slowestTotalHz) - 1) * 100)),
-            totalX = fastestTotalHz / slowestTotalHz,
-            message = 'is ' + totalPercent + '% ' + (totalX == 1 ? '' : '(' + formatNumber(totalX.toFixed(2)) + 'x) ') + 'faster than';
+        var aMeanHz = getGeometricMean(score.a),
+            bMeanHz = getGeometricMean(score.b),
+            fastestMeanHz = Math.max(aMeanHz, bMeanHz),
+            slowestMeanHz = Math.min(aMeanHz, bMeanHz),
+            xFaster = fastestMeanHz / slowestMeanHz,
+            percentFaster = formatNumber(Math.round((xFaster - 1) * 100)),
+            message = 'is ' + percentFaster + '% ' + (xFaster == 1 ? '' : '(' + formatNumber(xFaster.toFixed(2)) + 'x) ') + 'faster than';
 
         // report results
-        if (score.a >= score.b) {
+        if (aMeanHz >= bMeanHz) {
           log('\n' + buildName + ' ' + message + ' ' + otherName + '.');
         } else {
           log('\n' + otherName + ' ' + message + ' ' + buildName + '.');
@@ -174,10 +254,9 @@
   lodash.extend(Benchmark.options, {
     'async': true,
     'setup': '\
-      var window = Function("return this || global")(),\
-          _ = window._,\
+      var _ = window._,\
           lodash = window.lodash,\
-          belt = this.name == "Lo-Dash" ? lodash : _;\
+          belt = this.name == buildName ? lodash : _;\
       \
       var index,\
           date = new Date,\
@@ -197,31 +276,39 @@
       }\
       \
       if (typeof bind != "undefined") {\
-        var contextObject = { "name": "moe" },\
+        var thisArg = { "name": "moe" },\
             ctor = function() {};\
         \
         var func = function(greeting, punctuation) {\
           return greeting + ", " + this.name + (punctuation || ".");\
         };\
         \
-        var lodashBoundNormal = lodash.bind(func, contextObject),\
-            lodashBoundPartial = lodash.bind(func, contextObject, "hi");\
+        var _boundNormal = _.bind(func, thisArg),\
+            _boundPartial = _.bind(func, thisArg, "hi");\
         \
-        var _boundNormal = _.bind(func, contextObject),\
-            _boundPartial = _.bind(func, contextObject, "hi");\
+        var lodashBoundNormal = lodash.bind(func, thisArg),\
+            lodashBoundPartial = lodash.bind(func, thisArg, "hi");\
       }\
       \
       if (typeof bindAll != "undefined") {\
-        var bindAllObjects = Array(this.count),\
-            funcNames = belt.functions(lodash);\
+        var bindAllCount = -1,\
+            bindAllObjects = Array(this.count);\
+        \
+        var funcNames = belt.reject(belt.functions(belt).slice(0, 40), function(funcName) {\
+          return /^_/.test(funcName);\
+        });\
         \
         // potentially expensive\n\
         for (index = 0; index < this.count; index++) {\
           bindAllObjects[index] = belt.reduce(funcNames, function(object, funcName) {\
-            object[funcName] = lodash[funcName];\
+            object[funcName] = belt[funcName];\
             return object;\
           }, {});\
         }\
+      }\
+      if (typeof chaining != "undefined") {\
+        var _chaining = _.chain ? _(numbers).chain() : _(numbers),\
+            lodashChaining = lodash(numbers);\
       }\
       if (typeof compact != "undefined") {\
         var uncompacted = numbers.slice();\
@@ -321,12 +408,14 @@
             fiftyValues2 = Array(50),\
             seventyFiveValues = Array(75),\
             seventyFiveValues2 = Array(75),\
-            hundredValues = Array(100),\
-            hundredValues2 = Array(100),\
+            oneHundredValues = Array(100),\
+            oneHundredValues2 = Array(100),\
+            twoHundredValues = Array(200),\
+            twoHundredValues2 = Array(200),\
             lowerChars = "abcdefghijklmnopqrstuvwxyz".split(""),\
             upperChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");\
         \
-        for (index = 0; index < 100; index++) {\
+        for (index = 0; index < 200; index++) {\
           if (index < 15) {\
             twentyValues[index] = lowerChars[index];\
             twentyValues2[index] = upperChars[index];\
@@ -346,13 +435,15 @@
             fortyValues[index] =\
             fiftyValues[index] =\
             seventyFiveValues[index] =\
-            hundredValues[index] = lowerChars[index];\
+            oneHundredValues[index] =\
+            twoHundredValues[index] = lowerChars[index];\
             \
             thirtyValues2[index] =\
             fortyValues2[index] =\
             fiftyValues2[index] =\
             seventyFiveValues2[index] =\
-            hundredValues2[index] = upperChars[index];\
+            oneHundredValues2[index] =\
+            twoHundredValues2[index] = upperChars[index];\
           }\
           else {\
             if (index < 30) {\
@@ -371,8 +462,12 @@
               seventyFiveValues[index] =\
               seventyFiveValues2[index] = index;\
             }\
-            hundredValues[index] =\
-            hundredValues2[index] = index;\
+            if (index < 100) {\
+              oneHundredValues[index] =\
+              oneHundredValues2[index] = index;\
+            }\
+            twoHundredValues[index] =\
+            twoHundredValues2[index] = index;\
           }\
         }\
       }\
@@ -388,33 +483,14 @@
           "list": ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]\
         };\
         \
-        var tplBase =\
+        var tpl =\
           "<div>" +\
           "<h1 class=\'header1\'><%= header1 %></h1>" +\
           "<h2 class=\'header2\'><%= header2 %></h2>" +\
           "<h3 class=\'header3\'><%= header3 %></h3>" +\
           "<h4 class=\'header4\'><%= header4 %></h4>" +\
           "<h5 class=\'header5\'><%= header5 %></h5>" +\
-          "<h6 class=\'header6\'><%= header6 %></h6>";\
-        \
-        var tpl =\
-          tplBase +\
-          "<ul class=\'list\'>" +\
-          "<li class=\'item\'><%= list[0] %></li>" +\
-          "<li class=\'item\'><%= list[1] %></li>" +\
-          "<li class=\'item\'><%= list[2] %></li>" +\
-          "<li class=\'item\'><%= list[3] %></li>" +\
-          "<li class=\'item\'><%= list[4] %></li>" +\
-          "<li class=\'item\'><%= list[5] %></li>" +\
-          "<li class=\'item\'><%= list[6] %></li>" +\
-          "<li class=\'item\'><%= list[7] %></li>" +\
-          "<li class=\'item\'><%= list[8] %></li>" +\
-          "<li class=\'item\'><%= list[9] %></li>" +\
-          "</ul>" +\
-          "</div>";\
-        \
-        var tplWithEvaluate =\
-          tplBase +\
+          "<h6 class=\'header6\'><%= header6 %></h6>" +\
           "<ul class=\'list\'>" +\
           "<% for (var index = 0, length = list.length; index < length; index++) { %>" +\
           "<li class=\'item\'><%= list[index] %></li>" +\
@@ -422,33 +498,14 @@
           "</ul>" +\
           "</div>";\
         \
-        var tplBaseVerbose =\
+        var tplVerbose =\
           "<div>" +\
           "<h1 class=\'header1\'><%= data.header1 %></h1>" +\
           "<h2 class=\'header2\'><%= data.header2 %></h2>" +\
           "<h3 class=\'header3\'><%= data.header3 %></h3>" +\
           "<h4 class=\'header4\'><%= data.header4 %></h4>" +\
           "<h5 class=\'header5\'><%= data.header5 %></h5>" +\
-          "<h6 class=\'header6\'><%= data.header6 %></h6>";\
-        \
-        var tplVerbose =\
-          tplBaseVerbose +\
-          "<ul class=\'list\'>" +\
-          "<li class=\'item\'><%= data.list[0] %></li>" +\
-          "<li class=\'item\'><%= data.list[1] %></li>" +\
-          "<li class=\'item\'><%= data.list[2] %></li>" +\
-          "<li class=\'item\'><%= data.list[3] %></li>" +\
-          "<li class=\'item\'><%= data.list[4] %></li>" +\
-          "<li class=\'item\'><%= data.list[5] %></li>" +\
-          "<li class=\'item\'><%= data.list[6] %></li>" +\
-          "<li class=\'item\'><%= data.list[7] %></li>" +\
-          "<li class=\'item\'><%= data.list[8] %></li>" +\
-          "<li class=\'item\'><%= data.list[9] %></li>" +\
-          "</ul>" +\
-          "</div>";\
-        \
-        var tplVerboseWithEvaluate =\
-          tplBaseVerbose +\
+          "<h6 class=\'header6\'><%= data.header6 %></h6>" +\
           "<ul class=\'list\'>" +\
           "<% for (var index = 0, length = data.list.length; index < length; index++) { %>" +\
           "<li class=\'item\'><%= data.list[index] %></li>" +\
@@ -458,17 +515,69 @@
         \
         var settingsObject = { "variable": "data" };\
         \
-        var lodashTpl = lodash.template(tpl),\
-            lodashTplWithEvaluate = lodash.template(tplWithEvaluate),\
-            lodashTplVerbose = lodash.template(tplVerbose, null, settingsObject),\
-            lodashTplVerboseWithEvaluate = lodash.template(tplVerboseWithEvaluate, null, settingsObject);\
-        \
         var _tpl = _.template(tpl),\
-            _tplWithEvaluate = _.template(tplWithEvaluate),\
-            _tplVerbose = _.template(tplVerbose, null, settingsObject),\
-            _tplVerboseWithEvaluate = _.template(tplVerboseWithEvaluate, null, settingsObject);\
+            _tplVerbose = _.template(tplVerbose, null, settingsObject);\
+        \
+        var lodashTpl = lodash.template(tpl),\
+            lodashTplVerbose = lodash.template(tplVerbose, null, settingsObject);\
+      }\
+      if (typeof where != "undefined") {\
+        var _findWhere = _.findWhere || _.find,\
+            lodashFindWhere = lodash.findWhere || lodash.find,\
+            whereObject = { "num": 9 };\
+      }\
+      if (typeof zip != "undefined") {\
+        var unzipped = [["a", "b", "c"], [1, 2, 3], [true, false, true]],\
+            zipped = [["a", 1, true], ["b", 2, false], ["c", 3, true]];\
       }'
   });
+
+  /*--------------------------------------------------------------------------*/
+
+  suites.push(
+    Benchmark.Suite('`_(...)` with a number')
+      .add(buildName, '\
+        lodash(2)'
+      )
+      .add(otherName, '\
+        _(2)'
+      )
+  );
+
+  suites.push(
+    Benchmark.Suite('`_(...)` with an array')
+      .add(buildName, '\
+        lodash(numbers)'
+      )
+      .add(otherName, '\
+        _(numbers)'
+      )
+  );
+
+  suites.push(
+    Benchmark.Suite('`_(...)` with an object')
+      .add(buildName, '\
+        lodash(object)'
+      )
+      .add(otherName, '\
+        _(object)'
+      )
+  );
+
+  // avoid Underscore induced `OutOfMemoryError` in Rhino, Narwhal, and Ringo
+  if (!isJava) {
+    suites.push(
+      Benchmark.Suite('`_(...).tap(...)`')
+        .add(buildName, {
+          'fn': 'lodashChaining.tap(lodash.identity)',
+          'teardown': 'function chaining(){}'
+        })
+        .add(otherName, {
+          'fn':  '_chaining.tap(_.identity)',
+          'teardown': 'function chaining(){}'
+        })
+    );
+  }
 
   /*--------------------------------------------------------------------------*/
 
@@ -537,11 +646,11 @@
   suites.push(
     Benchmark.Suite('`_.bindAll` iterating arguments')
       .add(buildName, {
-        'fn': 'lodash.bindAll.apply(lodash, [bindAllObjects.pop()].concat(funcNames))',
+        'fn': 'lodash.bindAll.apply(lodash, [bindAllObjects[++bindAllCount]].concat(funcNames))',
         'teardown': 'function bindAll(){}'
       })
       .add(otherName, {
-        'fn': '_.bindAll.apply(_, [bindAllObjects.pop()].concat(funcNames))',
+        'fn': '_.bindAll.apply(_, [bindAllObjects[++bindAllCount]].concat(funcNames))',
         'teardown': 'function bindAll(){}'
       })
   );
@@ -549,11 +658,11 @@
   suites.push(
     Benchmark.Suite('`_.bindAll` iterating the `object`')
       .add(buildName, {
-        'fn': 'lodash.bindAll(bindAllObjects.pop())',
+        'fn': 'lodash.bindAll(bindAllObjects[++bindAllCount])',
         'teardown': 'function bindAll(){}'
       })
       .add(otherName, {
-        'fn': '_.bindAll(bindAllObjects.pop())',
+        'fn': '_.bindAll(bindAllObjects[++bindAllCount])',
         'teardown': 'function bindAll(){}'
       })
   );
@@ -667,13 +776,25 @@
   );
 
   suites.push(
-    Benchmark.Suite('`_.difference` iterating 30 elements')
+    Benchmark.Suite('`_.difference` iterating 75 elements')
       .add(buildName, {
-        'fn': 'lodash.difference(thirtyValues, thirtyValues2)',
+        'fn': 'lodash.difference(seventyFiveValues, seventyFiveValues2)',
         'teardown': 'function multiArrays(){}'
       })
       .add(otherName, {
-        'fn': '_.difference(thirtyValues, thirtyValues2)',
+        'fn': '_.difference(seventyFiveValues, seventyFiveValues2)',
+        'teardown': 'function multiArrays(){}'
+      })
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.difference` iterating 200 elements')
+      .add(buildName, {
+        'fn': 'lodash.difference(twoHundredValues, twoHundredValues2)',
+        'teardown': 'function multiArrays(){}'
+      })
+      .add(otherName, {
+        'fn': '_.difference(twoHundredValues, twoHundredValues2)',
         'teardown': 'function multiArrays(){}'
       })
   );
@@ -856,15 +977,20 @@
       )
   );
 
-  suites.push(
-    Benchmark.Suite('`_.find` with `properties`')
-      .add(buildName, '\
-        lodash.find(objects, { "num": 9 });'
-      )
-      .add(otherName, '\
-        _.findWhere(objects, { "num": 9 });'
-      )
-  );
+  // avoid Underscore induced `OutOfMemoryError` in Rhino, Narwhal, and Ringo
+  if (!isJava) {
+    suites.push(
+      Benchmark.Suite('`_.find` with `properties`')
+        .add(buildName, {
+          'fn': 'lodashFindWhere(objects, whereObject)',
+          'teardown': 'function where(){}'
+        })
+        .add(otherName, {
+          'fn': '_findWhere(objects, whereObject)',
+          'teardown': 'function where(){}'
+        })
+    );
+  }
 
   /*--------------------------------------------------------------------------*/
 
@@ -940,22 +1066,14 @@
 
   suites.push(
     Benchmark.Suite('`_.indexOf`')
-      .add(buildName, '\
-        lodash.indexOf(numbers, 9)'
-      )
-      .add(otherName, '\
-        _.indexOf(numbers, 9)'
-      )
-  );
-
-  suites.push(
-    Benchmark.Suite('`_.indexOf` with `isSorted`')
-      .add(buildName, '\
-        lodash.indexOf(numbers, 19, true)'
-      )
-      .add(otherName, '\
-        _.indexOf(numbers, 19, true)'
-      )
+      .add(buildName, {
+        'fn': 'lodash.indexOf(twoHundredValues, 199)',
+        'teardown': 'function multiArrays(){}'
+      })
+      .add(otherName, {
+        'fn': '_.indexOf(twoHundredValues, 199)',
+        'teardown': 'function multiArrays(){}'
+      })
   );
 
   /*--------------------------------------------------------------------------*/
@@ -971,13 +1089,25 @@
   );
 
   suites.push(
-    Benchmark.Suite('`_.intersection` iterating 100 elements')
+    Benchmark.Suite('`_.intersection` iterating 75 elements')
       .add(buildName, {
-        'fn': 'lodash.intersection(hundredValues, hundredValues2)',
+        'fn': 'lodash.intersection(seventyFiveValues, seventyFiveValues2)',
         'teardown': 'function multiArrays(){}'
       })
       .add(otherName, {
-        'fn': '_.intersection(hundredValues, hundredValues2)',
+        'fn': '_.intersection(seventyFiveValues, seventyFiveValues2)',
+        'teardown': 'function multiArrays(){}'
+      })
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.intersection` iterating 200 elements')
+      .add(buildName, {
+        'fn': 'lodash.intersection(twoHundredValues, twoHundredValues2)',
+        'teardown': 'function multiArrays(){}'
+      })
+      .add(otherName, {
+        'fn': '_.intersection(twoHundredValues, twoHundredValues2)',
         'teardown': 'function multiArrays(){}'
       })
   );
@@ -1045,13 +1175,13 @@
       .add(buildName, {
         'fn': '\
           lodash.isEqual(numbers, numbers2);\
-          lodash.isEqual(twoNumbers, twoNumbers2);',
+          lodash.isEqual(twoNumbers, twoNumbers2)',
         'teardown': 'function isEqual(){}'
       })
       .add(otherName, {
         'fn': '\
           _.isEqual(numbers, numbers2);\
-          _.isEqual(twoNumbers, twoNumbers2);',
+          _.isEqual(twoNumbers, twoNumbers2)',
         'teardown': 'function isEqual(){}'
       })
   );
@@ -1061,13 +1191,13 @@
       .add(buildName, {
         'fn': '\
           lodash.isEqual(nestedNumbers, nestedNumbers2);\
-          lodash.isEqual(nestedNumbers2, nestedNumbers3);',
+          lodash.isEqual(nestedNumbers2, nestedNumbers3)',
         'teardown': 'function isEqual(){}'
       })
       .add(otherName, {
         'fn': '\
           _.isEqual(nestedNumbers, nestedNumbers2);\
-          _.isEqual(nestedNumbers2, nestedNumbers3);',
+          _.isEqual(nestedNumbers2, nestedNumbers3)',
         'teardown': 'function isEqual(){}'
       })
   );
@@ -1077,13 +1207,13 @@
       .add(buildName, {
         'fn': '\
           lodash.isEqual(objects, objects2);\
-          lodash.isEqual(simpleObjects, simpleObjects2);',
+          lodash.isEqual(simpleObjects, simpleObjects2)',
         'teardown': 'function isEqual(){}'
       })
       .add(otherName, {
         'fn': '\
           _.isEqual(objects, objects2);\
-          _.isEqual(simpleObjects, simpleObjects2);',
+          _.isEqual(simpleObjects, simpleObjects2)',
         'teardown': 'function isEqual(){}'
       })
   );
@@ -1093,13 +1223,13 @@
       .add(buildName, {
         'fn': '\
           lodash.isEqual(object, object2);\
-          lodash.isEqual(simpleObject, simpleObject2);',
+          lodash.isEqual(simpleObject, simpleObject2)',
         'teardown': 'function isEqual(){}'
       })
       .add(otherName, {
         'fn': '\
           _.isEqual(object, object2);\
-          _.isEqual(simpleObject, simpleObject2);',
+          _.isEqual(simpleObject, simpleObject2)',
         'teardown': 'function isEqual(){}'
       })
   );
@@ -1107,7 +1237,7 @@
   /*--------------------------------------------------------------------------*/
 
   suites.push(
-    Benchmark.Suite('`_.isArguments`, `_.isDate`, `_.isFunction`, `_.isNumber`, `_.isRegExp`')
+    Benchmark.Suite('`_.isArguments`, `_.isDate`, `_.isFunction`, `_.isNumber`, `_.isObject`, `_.isRegExp`')
       .add(buildName, '\
         lodash.isArguments(arguments);\
         lodash.isArguments(object);\
@@ -1117,8 +1247,10 @@
         lodash.isFunction(object);\
         lodash.isNumber(1);\
         lodash.isNumber(object);\
+        lodash.isObject(object);\
+        lodash.isObject(1);\
         lodash.isRegExp(regexp);\
-        lodash.isRegExp(object);'
+        lodash.isRegExp(object)'
       )
       .add(otherName, '\
         _.isArguments(arguments);\
@@ -1129,8 +1261,10 @@
         _.isFunction(object);\
         _.isNumber(1);\
         _.isNumber(object);\
+        _.isObject(object);\
+        _.isObject(1);\
         _.isRegExp(regexp);\
-        _.isRegExp(object);'
+        _.isRegExp(object)'
       )
   );
 
@@ -1245,7 +1379,7 @@
         'teardown': 'function omit(){}'
       })
       .add(otherName, {
-        'fn': 'result = _.omit(wordToNumber, words)',
+        'fn': '_.omit(wordToNumber, words)',
         'teardown': 'function omit(){}'
       })
   );
@@ -1294,13 +1428,13 @@
         lodash.reduce(numbers, function(result, value, index) {\
           result[index] = value;\
           return result;\
-        }, {});'
+        }, {})'
       )
       .add(otherName, '\
         _.reduce(numbers, function(result, value, index) {\
           result[index] = value;\
           return result;\
-        }, {});'
+        }, {})'
       )
   );
 
@@ -1308,15 +1442,15 @@
     Benchmark.Suite('`_.reduce` iterating an object')
       .add(buildName, '\
         lodash.reduce(object, function(result, value, key) {\
-          result.push([key, value]);\
+          result.push(key, value);\
           return result;\
-        }, []);'
+        }, [])'
       )
       .add(otherName, '\
         _.reduce(object, function(result, value, key) {\
-          result.push([key, value]);\
+          result.push(key, value);\
           return result;\
-        }, []);'
+        }, [])'
       )
   );
 
@@ -1328,13 +1462,13 @@
         lodash.reduceRight(numbers, function(result, value, index) {\
           result[index] = value;\
           return result;\
-        }, {});'
+        }, {})'
       )
       .add(otherName, '\
         _.reduceRight(numbers, function(result, value, index) {\
           result[index] = value;\
           return result;\
-        }, {});'
+        }, {})'
       )
   );
 
@@ -1342,15 +1476,15 @@
     Benchmark.Suite('`_.reduceRight` iterating an object')
       .add(buildName, '\
         lodash.reduceRight(object, function(result, value, key) {\
-          result.push([key, value]);\
+          result.push(key, value);\
           return result;\
-        }, []);'
+        }, [])'
       )
       .add(otherName, '\
         _.reduceRight(object, function(result, value, key) {\
-          result.push([key, value]);\
+          result.push(key, value);\
           return result;\
-        }, []);'
+        }, [])'
       )
   );
 
@@ -1503,16 +1637,6 @@
   /*--------------------------------------------------------------------------*/
 
   suites.push(
-    Benchmark.Suite('`_.sortedIndex`')
-      .add(buildName, '\
-        lodash.sortedIndex(numbers, 25)'
-      )
-      .add(otherName, '\
-        _.sortedIndex(numbers, 25)'
-      )
-  );
-
-  suites.push(
     Benchmark.Suite('`_.sortedIndex` with `callback`')
       .add(buildName, {
         'fn': '\
@@ -1533,7 +1657,7 @@
   /*--------------------------------------------------------------------------*/
 
   suites.push(
-    Benchmark.Suite('`_.template` without "evaluate" delimiters (slow path)')
+    Benchmark.Suite('`_.template` (slow path)')
       .add(buildName, {
         'fn': 'lodash.template(tpl, tplData)',
         'teardown': 'function template(){}'
@@ -1545,19 +1669,7 @@
   );
 
   suites.push(
-    Benchmark.Suite('`_.template` with "evaluate" delimiters (slow path)')
-      .add(buildName, {
-        'fn': 'lodash.template(tplWithEvaluate, tplData)',
-        'teardown': 'function template(){}'
-      })
-      .add(otherName, {
-        'fn': '_.template(tplWithEvaluate, tplData)',
-        'teardown': 'function template(){}'
-      })
-  );
-
-  suites.push(
-    Benchmark.Suite('compiled template without "evaluate" delimiters')
+    Benchmark.Suite('compiled template')
       .add(buildName, {
         'fn': 'lodashTpl(tplData)',
         'teardown': 'function template(){}'
@@ -1569,37 +1681,13 @@
   );
 
   suites.push(
-    Benchmark.Suite('compiled template with "evaluate" delimiters')
-      .add(buildName, {
-        'fn': 'lodashTplWithEvaluate(tplData)',
-        'teardown': 'function template(){}'
-      })
-      .add(otherName, {
-        'fn': '_tplWithEvaluate(tplData)',
-        'teardown': 'function template(){}'
-      })
-  );
-
-  suites.push(
-    Benchmark.Suite('compiled template without a with-statement or "evaluate" delimiters')
+    Benchmark.Suite('compiled template without a with-statement')
       .add(buildName, {
         'fn': 'lodashTplVerbose(tplData)',
         'teardown': 'function template(){}'
       })
       .add(otherName, {
         'fn': '_tplVerbose(tplData)',
-        'teardown': 'function template(){}'
-      })
-  );
-
-  suites.push(
-    Benchmark.Suite('compiled template without a with-statement using "evaluate" delimiters')
-      .add(buildName, {
-        'fn': 'lodashTplVerboseWithEvaluate(tplData)',
-        'teardown': 'function template(){}'
-      })
-      .add(otherName, {
-        'fn': '_tplVerboseWithEvaluate(tplData)',
         'teardown': 'function template(){}'
       })
   );
@@ -1667,11 +1755,23 @@
   suites.push(
     Benchmark.Suite('`_.union` iterating an array of 75 elements')
       .add(buildName, {
-        'fn': 'lodash.union(fiftyValues, twentyFiveValues2);',
+        'fn': 'lodash.union(twentyFiveValues, fiftyValues2)',
         'teardown': 'function multiArrays(){}'
       })
       .add(otherName, {
-        'fn': '_.union(fiftyValues, twentyFiveValues2);',
+        'fn': '_.union(twentyFiveValues, fiftyValues2)',
+        'teardown': 'function multiArrays(){}'
+      })
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.union` iterating an array of 200 elements')
+      .add(buildName, {
+        'fn': 'lodash.union(oneHundredValues, oneHundredValues2)',
+        'teardown': 'function multiArrays(){}'
+      })
+      .add(otherName, {
+        'fn': '_.union(oneHundredValues, oneHundredValues2)',
         'teardown': 'function multiArrays(){}'
       })
   );
@@ -1693,7 +1793,7 @@
       .add(buildName, '\
         lodash.uniq(numbers.concat(twoNumbers, fourNumbers), function(num) {\
           return num % 2;\
-        });'
+        })'
       )
       .add(otherName, '\
         _.uniq(numbers.concat(twoNumbers, fourNumbers), function(num) {\
@@ -1705,12 +1805,38 @@
   suites.push(
     Benchmark.Suite('`_.uniq` iterating an array of 75 elements')
       .add(buildName, {
-        'fn': 'lodash.uniq(fiftyValues.concat(twentyFiveValues2));',
+        'fn': 'lodash.uniq(twentyFiveValues.concat(fiftyValues2))',
         'teardown': 'function multiArrays(){}'
       })
       .add(otherName, {
-        'fn': '_.uniq(fiftyValues.concat(twentyFiveValues2));',
+        'fn': '_.uniq(twentyFiveValues.concat(fiftyValues2))',
         'teardown': 'function multiArrays(){}'
+      })
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.uniq` iterating an array of 200 elements')
+      .add(buildName, {
+        'fn': 'lodash.uniq(oneHundredValues.concat(oneHundredValues2))',
+        'teardown': 'function multiArrays(){}'
+      })
+      .add(otherName, {
+        'fn': '_.uniq(oneHundredValues.concat(oneHundredValues2))',
+        'teardown': 'function multiArrays(){}'
+      })
+  );
+
+  /*--------------------------------------------------------------------------*/
+
+  suites.push(
+    Benchmark.Suite('`_.unzip`')
+      .add(buildName, {
+        'fn': 'lodash.unzip(zipped)',
+        'teardown': 'function zip(){}'
+      })
+      .add(otherName, {
+        'fn': '_.unzip(zipped)',
+        'teardown': 'function zip(){}'
       })
   );
 
@@ -1730,12 +1856,14 @@
 
   suites.push(
     Benchmark.Suite('`_.where`')
-      .add(buildName, '\
-        lodash.where(objects, { "num": 9 });'
-      )
-      .add(otherName, '\
-        _.where(objects, { "num": 9 });'
-      )
+      .add(buildName, {
+        'fn': 'lodash.where(objects, whereObject)',
+        'teardown': 'function where(){}'
+      })
+      .add(otherName, {
+        'fn': '_.where(objects, whereObject)',
+        'teardown': 'function where(){}'
+      })
   );
 
   /*--------------------------------------------------------------------------*/
@@ -1750,15 +1878,17 @@
       )
   );
 
+  /*--------------------------------------------------------------------------*/
+
   suites.push(
-    Benchmark.Suite('`_.without` iterating an array of 30 elements')
+    Benchmark.Suite('`_.zip`')
       .add(buildName, {
-        'fn': 'lodash.without.apply(lodash, [thirtyValues].concat(thirtyValues2));',
-        'teardown': 'function multiArrays(){}'
+        'fn': 'lodash.zip.apply(lodash, unzipped)',
+        'teardown': 'function zip(){}'
       })
       .add(otherName, {
-        'fn': '_.without.apply(_, [thirtyValues].concat(thirtyValues2));',
-        'teardown': 'function multiArrays(){}'
+        'fn': '_.zip.apply(_, unzipped)',
+        'teardown': 'function zip(){}'
       })
   );
 
@@ -1767,9 +1897,8 @@
   if (Benchmark.platform + '') {
     log(Benchmark.platform);
   }
-
   // in the browser, expose `run` to be called later
-  if (window.document) {
+  if (window.document && !window.phantom) {
     window.run = run;
   } else {
     run();

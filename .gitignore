@@ -1,5 +1,8 @@
 .DS_Store
 *.custom.*
-node_modules/
-vendor/closure-compiler/
-vendor/uglifyjs/
+*.template.*
+*.d.ts
+*.map
+node_modules
+vendor/closure-compiler
+vendor/uglifyjs
