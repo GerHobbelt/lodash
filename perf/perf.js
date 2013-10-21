@@ -76,7 +76,10 @@
   var buildName = window.buildName = basename(ui.buildPath, '.js');
 
   /** The other library basename */
-  var otherName = window.otherName = basename(ui.otherPath, '.js');
+  var otherName = window.otherName = (function() {
+    var result = basename(ui.otherPath, '.js');
+    return result + (result == buildName ? ' (2)' : '');
+  }());
 
   /** Detect if in a browser environment */
   var isBrowser = isHostType(window, 'document') && isHostType(window, 'navigator');
@@ -94,9 +97,9 @@
    * it will be removed from the basename.
    *
    * @private
-   * @param {String} path The file path to inspect.
-   * @param {String} extension The extension to remove.
-   * @returns {String} Returns the basename.
+   * @param {string} path The file path to inspect.
+   * @param {string} extension The extension to remove.
+   * @returns {string} Returns the basename.
    */
   function basename(filePath, extension) {
     var result = (filePath || '').split(rePathSeparator).pop();
@@ -111,7 +114,7 @@
    *
    * @private
    * @param {Array} array The array of values.
-   * @returns {Number} The geometric mean.
+   * @returns {number} The geometric mean.
    */
   function getGeometricMean(array) {
     return Math.pow(Math.E, lodash.reduce(array, function(sum, x) {
@@ -125,7 +128,7 @@
    *
    * @private
    * @param {Object} bench The benchmark object.
-   * @returns {Number} Returns the adjusted Hz.
+   * @returns {number} Returns the adjusted Hz.
    */
   function getHz(bench) {
     var result = 1 / (bench.stats.mean + bench.stats.moe);
@@ -138,9 +141,9 @@
    * types of "object", "function", or "unknown".
    *
    * @private
-   * @param {Mixed} object The owner of the property.
-   * @param {String} property The property to check.
-   * @returns {Boolean} Returns `true` if the property value is a non-primitive, else `false`.
+   * @param {*} object The owner of the property.
+   * @param {string} property The property to check.
+   * @returns {boolean} Returns `true` if the property value is a non-primitive, else `false`.
    */
   function isHostType(object, property) {
     if (object == null) {
@@ -154,7 +157,7 @@
    * Logs text to the console.
    *
    * @private
-   * @param {String} text The text to log.
+   * @param {string} text The text to log.
    */
   function log(text) {
     console.log(text + '');
@@ -267,6 +270,7 @@
           numbers = Array(limit),\
           fourNumbers = [5, 25, 10, 30],\
           nestedNumbers = [1, [2], [3, [[4]]]],\
+          nestedObjects = [{}, [{}], [{}, [[{}]]]],\
           twoNumbers = [12, 23];\
       \
       for (index = 0; index < limit; index++) {\
@@ -284,10 +288,17 @@
         };\
         \
         var _boundNormal = _.bind(func, thisArg),\
+            _boundMultiple = _boundNormal,\
             _boundPartial = _.bind(func, thisArg, "hi");\
         \
         var lodashBoundNormal = lodash.bind(func, thisArg),\
+            lodashBoundMultiple = lodashBoundNormal,\
             lodashBoundPartial = lodash.bind(func, thisArg, "hi");\
+        \
+        for (index = 0; index < 10; index++) {\
+          _boundMultiple = _.bind(_boundMultiple, { "name": "moe" + index });\
+          lodashBoundMultiple = lodash.bind(lodashBoundMultiple, { "name": "moe" + index });\
+        }\
       }\
       \
       if (typeof bindAll != "undefined") {\
@@ -526,9 +537,20 @@
             lodashFindWhere = lodash.findWhere || lodash.find,\
             whereObject = { "num": 9 };\
       }\
+      if (typeof wrap != "undefined") {\
+        var add = function(a, b) {\
+          return a + b;\
+        };\
+        \
+        var average = function(func, a, b) {\
+          return (func(a, b) / 2).toFixed(2);\
+        };\
+        \
+        var _wrapped = _.wrap(add, average);\
+            lodashWrapped = lodash.wrap(add, average);\
+      }\
       if (typeof zip != "undefined") {\
-        var unzipped = [["a", "b", "c"], [1, 2, 3], [true, false, true]],\
-            zipped = [["a", 1, true], ["b", 2, false], ["c", 3, true]];\
+        var unzipped = [["a", "b", "c"], [1, 2, 3], [true, false, true]];\
       }'
   });
 
@@ -584,11 +606,11 @@
   suites.push(
     Benchmark.Suite('`_.bind` (uses native `Function#bind` if available and inferred fast)')
       .add(buildName, {
-        'fn': 'lodash.bind(func, { "name": "moe" }, "hi")',
+        'fn': 'lodash.bind(func, { "name": "moe" })',
         'teardown': 'function bind(){}'
       })
       .add(otherName, {
-        'fn': '_.bind(func, { "name": "moe" }, "hi")',
+        'fn': '_.bind(func, { "name": "moe" })',
         'teardown': 'function bind(){}'
       })
   );
@@ -637,6 +659,18 @@
       })
       .add(otherName, {
         'fn': '_boundPartial("!")',
+        'teardown': 'function bind(){}'
+      })
+  );
+
+  suites.push(
+    Benchmark.Suite('bound multiple times')
+      .add(buildName, {
+        'fn': 'lodashBoundMultiple()',
+        'teardown': 'function bind(){}'
+      })
+      .add(otherName, {
+        'fn': '_boundMultiple()',
         'teardown': 'function bind(){}'
       })
   );
@@ -698,20 +732,20 @@
   suites.push(
     Benchmark.Suite('`_.contains` iterating an array')
       .add(buildName, '\
-        lodash.contains(numbers, 19)'
+        lodash.contains(numbers, limit - 1)'
       )
       .add(otherName, '\
-        _.contains(numbers, 19)'
+        _.contains(numbers, limit - 1)'
       )
   );
 
   suites.push(
     Benchmark.Suite('`_.contains` iterating an object')
       .add(buildName, '\
-        lodash.contains(object, 19)'
+        lodash.contains(object, limit - 1)'
       )
       .add(otherName, '\
-        _.contains(object, 19)'
+        _.contains(object, limit - 1)'
       )
   );
 
@@ -953,12 +987,12 @@
     Benchmark.Suite('`_.find` iterating an array')
       .add(buildName, '\
         lodash.find(numbers, function(num) {\
-          return num === 19;\
+          return num === (limit - 1);\
         })'
       )
       .add(otherName, '\
         _.find(numbers, function(num) {\
-          return num === 19;\
+          return num === (limit - 1);\
         })'
       )
   );
@@ -1001,6 +1035,16 @@
       )
       .add(otherName, '\
         _.flatten(nestedNumbers)'
+      )
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.flatten` with objects')
+      .add(buildName, '\
+        lodash.flatten(nestedObjects)'
+      )
+      .add(otherName, '\
+        _.flatten(nestedObjects)'
       )
   );
 
@@ -1058,6 +1102,42 @@
       })
       .add(otherName, {
         'fn': '_.groupBy(wordToNumber, function(num) { return num >> 1; })',
+        'teardown': 'function countBy(){}'
+      })
+  );
+
+  /*--------------------------------------------------------------------------*/
+
+  suites.push(
+    Benchmark.Suite('`_.indexBy` with `callback` iterating an array')
+      .add(buildName, '\
+        lodash.indexBy(numbers, function(num) { return num >> 1; })'
+      )
+      .add(otherName, '\
+        _.indexBy(numbers, function(num) { return num >> 1; })'
+      )
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.indexBy` with `property` name iterating an array')
+      .add(buildName, {
+        'fn': 'lodash.indexBy(words, "length")',
+        'teardown': 'function countBy(){}'
+      })
+      .add(otherName, {
+        'fn': '_.indexBy(words, "length")',
+        'teardown': 'function countBy(){}'
+      })
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.indexBy` with `callback` iterating an object')
+      .add(buildName, {
+        'fn': 'lodash.indexBy(wordToNumber, function(num) { return num >> 1; })',
+        'teardown': 'function countBy(){}'
+      })
+      .add(otherName, {
+        'fn': '_.indexBy(wordToNumber, function(num) { return num >> 1; })',
         'teardown': 'function countBy(){}'
       })
   );
@@ -1535,6 +1615,18 @@
   /*--------------------------------------------------------------------------*/
 
   suites.push(
+    Benchmark.Suite('`_.sample` with an `n`')
+      .add(buildName, '\
+        lodash.sample(numbers, limit / 2)'
+      )
+      .add(otherName, '\
+        _.sample(numbers, limit / 2)'
+      )
+  );
+
+  /*--------------------------------------------------------------------------*/
+
+  suites.push(
     Benchmark.Suite('`_.shuffle`')
       .add(buildName, '\
         lodash.shuffle(numbers)'
@@ -1562,12 +1654,12 @@
     Benchmark.Suite('`_.some` iterating an array')
       .add(buildName, '\
         lodash.some(numbers, function(num) {\
-          return num == 19;\
+          return num == (limit - 1);\
         })'
       )
       .add(otherName, '\
         _.some(numbers, function(num) {\
-          return num == 19;\
+          return num == (limit - 1);\
         })'
       )
   );
@@ -1576,12 +1668,12 @@
     Benchmark.Suite('`_.some` with `thisArg` iterating an array (slow path)')
       .add(buildName, '\
         lodash.some(objects, function(value, index) {\
-          return this["key" + index] == 19;\
+          return this["key" + index] == (limit - 1);\
         }, object)'
       )
       .add(otherName, '\
         _.some(objects, function(value, index) {\
-          return this["key" + index] == 19;\
+          return this["key" + index] == (limit - 1);\
         }, object)'
       )
   );
@@ -1590,12 +1682,12 @@
     Benchmark.Suite('`_.some` iterating an object')
       .add(buildName, '\
         lodash.some(object, function(num) {\
-          return num == 19;\
+          return num == (limit - 1);\
         })'
       )
       .add(otherName, '\
         _.some(object, function(num) {\
-          return num == 19;\
+          return num == (limit - 1);\
         })'
       )
   );
@@ -1829,20 +1921,6 @@
   /*--------------------------------------------------------------------------*/
 
   suites.push(
-    Benchmark.Suite('`_.unzip`')
-      .add(buildName, {
-        'fn': 'lodash.unzip(zipped)',
-        'teardown': 'function zip(){}'
-      })
-      .add(otherName, {
-        'fn': '_.unzip(zipped)',
-        'teardown': 'function zip(){}'
-      })
-  );
-
-  /*--------------------------------------------------------------------------*/
-
-  suites.push(
     Benchmark.Suite('`_.values`')
       .add(buildName, '\
         lodash.values(object)'
@@ -1876,6 +1954,20 @@
       .add(otherName, '\
         _.without(numbers, 9, 12, 14, 15)'
       )
+  );
+
+  /*--------------------------------------------------------------------------*/
+
+  suites.push(
+    Benchmark.Suite('`_.wrap` result called')
+      .add(buildName, {
+        'fn': 'lodashWrapped(2, 5)',
+        'teardown': 'function wrap(){}'
+      })
+      .add(otherName, {
+        'fn': '_wrapped(2, 5)',
+        'teardown': 'function wrap(){}'
+      })
   );
 
   /*--------------------------------------------------------------------------*/

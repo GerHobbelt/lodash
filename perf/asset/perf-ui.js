@@ -5,10 +5,10 @@
   var basePath = '../';
 
   /** The Lo-Dash build to load */
-  var build = (/build=([^&]+)/.exec(location.search) || [])[1];
+  var build = (build = /build=([^&]+)/.exec(location.search)) && decodeURIComponent(build[1]);
 
   /** The other library to load */
-  var other = (/other=([^&]+)/.exec(location.search) || [])[1];
+  var other = (other = /other=([^&]+)/.exec(location.search)) && decodeURIComponent(other[1]);
 
   /** The `ui` object */
   var ui = {};
@@ -20,7 +20,7 @@
    *
    * @private
    * @param {Element} element The element.
-   * @param {String} eventName The name of the event.
+   * @param {string} eventName The name of the event.
    * @param {Function} handler The event handler.
    * @returns {Element} The element.
    */
@@ -34,6 +34,12 @@
 
   /*--------------------------------------------------------------------------*/
 
+  // expose `ui.urlParams` properties
+  ui.urlParams = {
+    'build': build,
+    'other': other
+  };
+
   // expose Lo-Dash build file path
   ui.buildPath = (function() {
     var result;
@@ -45,10 +51,10 @@
       case 'lodash-custom-dev': result = 'lodash.custom.js'; break;
       case 'lodash-custom':     result = 'lodash.custom.min.js'; break;
       case 'lodash-modern':
-      case  undefined:          result = 'dist/lodash.min.js'; break;
-      default:                  result = build;
+      case null:                result = 'dist/lodash.min.js'; break;
+      default:                  return build;
     }
-    return result == build ? result : (basePath + result);
+    return basePath + result;
   }());
 
   // expose other library file path
@@ -64,16 +70,19 @@
       case 'lodash-custom':     result = 'lodash.custom.min.js'; break;
       case 'underscore-dev':    result = 'vendor/underscore/underscore.js'; break;
       case 'underscore':
-      case  undefined:          result = 'vendor/underscore/underscore-min.js'; break;
-      default:                  result = other;
+      case null:                result = 'vendor/underscore/underscore-min.js'; break;
+      default:                  return other;
     }
-    return result == other ? result : (basePath + result);
+    return basePath + result;
   }());
 
   // initialize controls
   addListener(window, 'load', function() {
     function eventHandler(event) {
-      var search = location.search.replace(/^\?|&?(?:build|other)=[^&]*&?/g, '');
+      var buildIndex = buildList.selectedIndex,
+          otherIndex = otherList.selectedIndex,
+          search = location.search.replace(/^\?|&?(?:build|other)=[^&]*&?/g, '');
+
       if (event.stopPropagation) {
         event.stopPropagation();
       } else {
@@ -82,8 +91,8 @@
       location.href =
         location.href.split('?')[0] + '?' +
         (search ? search + '&' : '') +
-        'build=' + buildList[buildList.selectedIndex].value + '&' +
-        'other=' + otherList[otherList.selectedIndex].value;
+        'build=' + (buildIndex < 0 ? build : buildList[buildIndex].value) + '&' +
+        'other=' + (otherIndex < 0 ? other : otherList[otherIndex].value);
     }
 
     var span1 = document.createElement('span');
@@ -132,7 +141,7 @@
         case 'lodash-custom-dev': return 5;
         case 'lodash-custom':     return 6;
         case 'lodash-modern':
-        case undefined:           return 3;
+        case null:                return 3;
       }
       return -1;
     }());
@@ -148,7 +157,7 @@
         case 'lodash-custom-dev': return 7;
         case 'lodash-custom':     return 8;
         case 'underscore':
-        case undefined:           return 1;
+        case null:                return 1;
       }
       return -1;
     }());

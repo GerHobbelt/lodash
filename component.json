@@ -1,20 +1,12 @@
 {
   "name": "lodash",
-  "repo": "bestiejs/lodash",
-  "version": "1.3.1",
-  "description": "A low-level utility library delivering consistency, customization, performance, and extra features.",
+  "repo": "lodash/lodash",
+  "version": "2.2.1",
+  "description": "A utility library delivering consistency, customization, performance, & extras.",
   "license": "MIT",
+  "keywords": ["amd", "browser", "client", "functional", "server", "util"],
   "scripts": [
     "index.js",
     "dist/lodash.compat.js"
-  ],
-  "keywords": [
-    "browser",
-    "client",
-    "functional",
-    "performance",
-    "server",
-    "speed",
-    "util"
   ]
 }

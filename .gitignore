@@ -1,8 +1,10 @@
 .DS_Store
 *.custom.*
 *.template.*
-*.d.ts
 *.map
+/*.min.*
+modularize
 node_modules
-vendor/closure-compiler
-vendor/uglifyjs
+dist/*.backbone.*
+dist/*.legacy.*
+dist/*.mobile.*
