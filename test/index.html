@@ -14,95 +14,160 @@
 		<script src="../vendor/qunit/qunit/qunit.js"></script>
 		<script src="../vendor/qunit-extras/qunit-extras.js"></script>
 		<script src="../vendor/platform.js/platform.js"></script>
+		<script src="./asset/set.js"></script>
 		<script src="./asset/test-ui.js"></script>
 		<div id="qunit"></div>
 		<div id="exports"></div>
 		<script>
-			// set bad shims
-			Array._isArray = Array.isArray;
-			Array.isArray = function() {};
+			var setProperty = (function() {
+				var _defineProperty = Object.defineProperty;
+				return function(object, key, value) {
+					try {
+						_defineProperty(object, key, {
+							'configurable': true,
+							'enumerable': false,
+							'writable': true,
+							'value': value
+						});
+					} catch(e) {
+						object[key] = value;
+					}
+				};
+			}());
 
-			Date._now = Date.now;
-			Date.now = function() {};
+			function addBizarroMethods() {
+				// allow bypassing native checks
+				setProperty(Function.prototype, 'toString', (function() {
+					function wrapper() {
+						setProperty(Function.prototype, 'toString', fnToString);
+						var result = this === Set ? this.toString() : fnToString.call(this);
+						setProperty(Function.prototype, 'toString', wrapper);
+						return result;
+					}
+					var fnToString = Function.prototype.toString;
+					setProperty(Function.prototype, '_toString', fnToString);
+					return wrapper;
+				}()));
 
-			Function.prototype._bind = Function.prototype.bind;
-			Function.prototype.bind = function() { return function() {}; };
+				// add extensions
+				Function.prototype._method = function() {};
 
-			Object._create = Object.create;
-			Object.create = function() {};
+				// set bad shims
+				setProperty(Array, '_isArray', Array.isArray);
+				setProperty(Array, 'isArray', function() {});
 
-			Object._defineProperty = Object.defineProperty;
-			Object.defineProperty = function() {};
+				setProperty(Date, '_now', Date.now);
+				setProperty(Date, 'now', function() {});
 
-			Object._getPrototypeOf = Object.getPrototypeOf;
-			Object.getPrototypeOf = function() {};
+				setProperty(Object, '_create', Object.create);
+				setProperty(Object, 'create', function() {});
 
-			Object._keys = Object.keys;
-			Object.keys = function() {};
+				setProperty(Object, '_defineProperty', Object.defineProperty);
+				setProperty(Object, 'defineProperty', function() {});
 
-			// load Lo-Dash and expose it to the bad shims
-			document.write('<script src="' + (ui.isModularize ? '../lodash.js' : ui.buildPath) + '"><\/script>');
+				setProperty(Object, '_getPrototypeOf', Object.getPrototypeOf);
+				setProperty(Object, 'getPrototypeOf', function() {});
+
+				setProperty(Object, '_keys', Object.keys);
+				setProperty(Object, 'keys', function() {});
+
+				setProperty(Object.prototype, 'hasOwnProperty', (function() {
+					function wrapper(key) {
+						if (key == '1' && this && typeof this == 'object' && this.length === 2 &&
+								hasOwnProperty.call(this, 'callee') &&
+								!propertyIsEnumerable.call(this, 'callee') &&
+								this[0] === 0 && this[1] === 0) {
+							throw new Error;
+						}
+						return hasOwnProperty.call(this, key);
+					}
+					var hasOwnProperty = Object.prototype.hasOwnProperty,
+					    propertyIsEnumerable = Object.prototype.propertyIsEnumerable;
+
+					setProperty(Object.prototype, '_hasOwnProperty', hasOwnProperty);
+					return wrapper;
+				}()));
+
+				setProperty(String.prototype, '_contains', String.prototype.contains);
+				setProperty(String.prototype, 'contains', String.prototype._contains ? function() {} : Boolean);
+
+				setProperty(window, 'WinRTError', Error);
+
+				setProperty(document, '_createDocumentFragment', document.createDocumentFragment);
+				document.createDocumentFragment = function() {};
+			}
+
+			function removeBizarroMethods() {
+				if (Array._isArray) {
+					setProperty(Array, 'isArray', Array._isArray);
+				} else {
+					delete Array.isArray;
+				}
+				if (Date._now) {
+					setProperty(Date, 'now', Date._now);
+				} else {
+					delete Date.now;
+				}
+				if (Object._create) {
+					setProperty(Object, 'create', Object._create);
+				} else {
+					delete Object.create;
+				}
+				if (Object._defineProperty) {
+					setProperty(Object, 'defineProperty', Object._defineProperty);
+				} else {
+					delete Object.defineProperty;
+				}
+				if (Object._getPrototypeOf) {
+					setProperty(Object, 'getPrototypeOf', Object._getPrototypeOf);
+				} else {
+					delete Object.getPrototypeOf;
+				}
+				if (Object._keys) {
+					setProperty(Object, 'keys', Object._keys);
+				} else {
+					delete Object.keys;
+				}
+				if (String.prototype._contains) {
+					setProperty(String.prototype, 'contains', String.prototype._contains);
+				} else {
+					delete String.prototype.contains;
+				}
+				setProperty(window, 'WinRTError', undefined);
+				setProperty(Function.prototype, 'toString', Function.prototype._toString);
+				setProperty(Object.prototype, 'hasOwnProperty', Object.prototype._hasOwnProperty);
+
+				document.createDocumentFragment = document._createDocumentFragment;
+				setProperty(document, '_createDocumentFragment', undefined);
+
+				delete Array._isArray;
+				delete Date._now;
+				delete Function.prototype._method;
+				delete Function.prototype._toString;
+				delete Object._create;
+				delete Object._defineProperty;
+				delete Object._getPrototypeOf;
+				delete Object._keys;
+				delete Object.prototype._hasOwnProperty;
+				delete String.prototype._contains;
+			}
+
+			// load Lo-Dash and expose it to the bad extensions/shims
+			if (!ui.isModularize) {
+				addBizarroMethods();
+				document.write('<script src="' + ui.buildPath + '"><\/script>');
+			}
 		</script>
 		<script>
-			// store Lo-Dash to test for bad shim detection
-			var lodashBadShim = window._;
-
-			// restore native methods
-			if (Array._isArray) {
-				Array.isArray = Array._isArray;
-			} else {
-				delete Array.isArray;
-			}
-			if (Date._now) {
-				Date.now = Date._now;
-			} else {
-				delete Date.now;
-			}
-			if (Function.prototype._bind) {
-				Function.prototype.bind = Function.prototype._bind;
-			} else {
-				delete Function.prototype.bind;
-			}
-			if (Object._create) {
-				Object.create = Object._create;
-			} else {
-				delete Object.create;
-			}
-			if (Object._defineProperty) {
-				Object.defineProperty = Object._defineProperty;
-			} else {
-				delete Object.defineProperty;
-			}
-			if (Object._getPrototypeOf) {
-				Object.getPrototypeOf = Object._getPrototypeOf;
-			} else {
-				delete Object.getPrototypeOf;
-			}
-			if (Object._keys) {
-				Object.keys = Object._keys;
-			} else {
-				delete Object.keys;
-			}
-			delete Array._isArray;
-			delete Date._now;
-			delete Function.prototype._bind;
-			delete Object._create;
-			delete Object._defineProperty;
-			delete Object._getPrototypeOf;
-			delete Object._keys;
-
 			QUnit.config.hidepassed = true;
 
-			// assign results to `global_test_results` for Sauce Labs
-			var global_test_results;
-			QUnit.done(function(results) {
-				global_test_results = results;
-			});
-
-			// clear existing `_` value
-			window._ = undefined;
-
-			// load Lo-Dash and test scripts
+			// store Lo-Dash to test for bad extensions/shims
+			if (!ui.isModularize) {
+				var lodashBizarro = window._;
+				window._ = undefined;
+				removeBizarroMethods();
+			}
+			// load test scripts
 			document.write(ui.urlParams.loader == 'none'
 				? '<script src="' + ui.buildPath + '"><\/script><script src="test.js"><\/script>'
 				: '<script data-dojo-config="async:1" src="' + ui.loaderPath + '"><\/script>'
@@ -123,68 +188,107 @@
 				var reBasename = /[\w.-]+$/,
 				    basePath = ('//' + location.host + location.pathname.replace(reBasename, '')).replace(/\btest\/$/, ''),
 				    modulePath = ui.buildPath.replace(/\.js$/, ''),
-				    locationPath = modulePath.replace(reBasename, ''),
-				    moduleMain = modulePath.match(reBasename)[0];
+				    moduleMain = modulePath.match(reBasename)[0],
+				    locationPath = modulePath.replace(reBasename, '').replace(/^\/|\/$/g, ''),
+				    shimmedLocationPath = './abc/../' + locationPath,
+				    underscoreLocationPath = './xyz/../' + locationPath,
+				    uid = +new Date;
 
-				QUnit.config.autostart = false;
-
-				// load Lo-Dash as a module
-				require({
-					'baseUrl': './',
-					'urlArgs': 't=' + (+new Date),
-					'packages': [
-						{
-							'name': 'lodash',
-							'location': locationPath,
-							'main': moduleMain
-						},
-						{
-							'name': 'shimmed',
-							'location': './abc/../' + locationPath,
-							'main': moduleMain
-						},
-						{
-							'name': 'underscore',
-							'location': './xyz/../' + locationPath,
-							'main': moduleMain
-						},
-						{
+				function getConfig() {
+					var result = {
+						'baseUrl': './',
+						'urlArgs': 't=' + uid++,
+						'waitSeconds': 0,
+						'paths': {},
+						'packages': [{
 							'name': 'test',
-							'location': basePath + '/test',
+							'location': basePath + 'test',
 							'main': 'test',
 							'config': {
 								// work around no global being exported
 								'exports': 'QUnit',
 								'loader': 'curl/loader/legacy'
 							}
+						}],
+						'shim': {
+							'shimmed': {
+								'exports': '_'
+							}
 						}
-					],
-					'shim': {
-						'shimmed': {
-							'exports': '_'
-						}
-					}
-				},
-				['lodash', 'shimmed', 'underscore'], function(lodash, shimmed, underscore) {
-					if (shimmed && shimmed.noConflict) {
-						shimmedModule = shimmed.noConflict();
-						shimmedModule.moduleName = 'shimmed';
-					}
-					if (underscore && underscore.noConflict) {
-						underscoreModule = underscore.noConflict();
-						underscoreModule.moduleName = 'underscore';
-					}
-					if (lodash) {
-						lodashModule = lodash;
-						lodashModule.moduleName = 'lodash';
-					}
+					};
+
 					if (ui.isModularize) {
-						window._ = lodash;
+						result.packages.push({
+							'name': 'lodash',
+							'location': locationPath,
+							'main': moduleMain
+						}, {
+							'name': 'shimmed',
+							'location': shimmedLocationPath,
+							'main': moduleMain
+						}, {
+							'name': 'underscore',
+							'location': underscoreLocationPath,
+							'main': moduleMain
+						});
+					} else {
+						result.paths.lodash = modulePath;
+						result.paths.shimmed = shimmedLocationPath + '/' + moduleMain;
+						result.paths.underscore = underscoreLocationPath + '/' + moduleMain;
 					}
-					require(['test'], function() {
+					return result;
+				}
+
+				function loadTests() {
+					require(getConfig(), ['test'], function() {
 						QUnit.start();
 					});
-				});
+				}
+
+				function loadModulesAndTests() {
+					require(getConfig(), ['lodash', 'shimmed', 'underscore'], function(lodash, shimmed, underscore) {
+						var oldDash = window._;
+
+						if (shimmed && shimmed.noConflict) {
+							shimmedModule = shimmed.noConflict();
+							shimmedModule.moduleName = 'shimmed';
+						}
+						if (underscore && underscore.noConflict) {
+							underscoreModule = underscore.noConflict();
+							underscoreModule.moduleName = 'underscore';
+						}
+						if (lodash) {
+							lodashModule = lodash;
+							lodashModule.moduleName = 'lodash';
+						}
+						if (oldDash || ui.isModularize) {
+							window._ = lodash;
+						}
+						if (ui.isModularize) {
+							require(getConfig(), ['lodash/internals/baseEach'], function(baseEach) {
+								lodash._baseEach = baseEach;
+								loadTests();
+							});
+						} else {
+							loadTests();
+						}
+					});
+				}
+
+				QUnit.config.autostart = false;
+
+				if (window.requirejs) {
+					addBizarroMethods();
+					require(getConfig(), ['lodash'], function(lodash) {
+						lodashBizarro = lodash.noConflict();
+						delete requirejs.s.contexts._;
+
+						removeBizarroMethods();
+						loadModulesAndTests();
+					});
+				} else {
+					loadModulesAndTests();
+				}
 			}());
 
 			// set a more readable browser name

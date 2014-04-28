@@ -1,11 +1,16 @@
 /*!
  * QUnit Extras v1.0.0
- * Copyright 2011-2012 John-David Dalton <http://allyoucanleet.com/>
+ * Copyright 2011-2014 John-David Dalton <http://allyoucanleet.com/>
  * Based on a gist by Jörn Zaefferer <https://gist.github.com/722381>
  * Available under MIT license <http://mths.be/mit>
  */
-;(function(root, undefined) {
-  'use strict';
+;(function() {
+
+  /** Used as a safe reference for `undefined` in pre ES5 environments */
+  var undefined;
+
+  /** Used as a horizontal rule in console output */
+  var hr = '----------------------------------------';
 
   /** Native method shortcut */
   var unshift = Array.prototype.unshift;
@@ -18,6 +23,13 @@
       reExpected = /Expected: *<\/th><td><pre>([\s\S]*?)<\/pre>/,
       reMessage = /^<span class='test-message'>([\s\S]*?)<\/span>/;
 
+  /** Used to associate color names with their corresponding codes */
+  var colorCodes = {
+    'blue': 34,
+    'green': 32,
+    'red': 31
+  };
+
   /** Used to convert HTML entities to characters */
   var htmlUnescapes = {
     '&amp;': '&',
@@ -27,15 +39,24 @@
     '&#39;': "'"
   };
 
-  /** Used as a horizontal rule in console output */
-  var hr = '----------------------------------------';
+  /** Used to determine if values are of the language type Object */
+  var objectTypes = {
+    'function': true,
+    'object': true
+  };
+
+  /** Used as a reference to the global object */
+  var root = (objectTypes[typeof window] && window) || this;
 
   /** Detect free variable `exports` */
-  var freeExports = typeof exports == 'object' && exports;
+  var freeExports = objectTypes[typeof exports] && exports && !exports.nodeType && exports;
 
-  /** Detect free variable `global`, from Node.js or Browserified code, and use it as `root` */
-  var freeGlobal = typeof global == 'object' && global;
-  if (freeGlobal.global === freeGlobal || freeGlobal.window === freeGlobal) {
+  /** Detect free variable `module` */
+  var freeModule = objectTypes[typeof module] && module && !module.nodeType && module;
+
+  /** Detect free variable `global` from Node.js or Browserified code and use it as `root` */
+  var freeGlobal = freeExports && freeModule && typeof global == 'object' && global;
+  if (freeGlobal && (freeGlobal.global === freeGlobal || freeGlobal.window === freeGlobal || freeGlobal.self === freeGlobal)) {
     root = freeGlobal;
   }
 
@@ -45,10 +66,10 @@
    * Checks if a given value is present in an array using strict equality
    * for comparisons, i.e. `===`.
    *
-   * @oruvate
+   * @private
    * @param {Array} array The array to iterate over.
-   * @param {*} target The value to check for.
-   * @returns {boolean} Returns `true` if the `target` element is found, else `false`.
+   * @param {*} value The value to check for.
+   * @returns {boolean} Returns `true` if the `value` is found, else `false`.
    */
   function contains(array, value) {
     var index = -1,
@@ -132,14 +153,34 @@
     var console = context.console,
         phantom = context.phantom,
         process = phantom || context.process,
-        document = !phantom && context.document;
+        document = !phantom && context.document,
+        java = !document && context.java;
+
+    /** Detect the OS of the platform */
+    var os = (function() {
+      if (java) {
+        return java.lang.System.getProperty('os.name');
+      }
+      if (phantom) {
+        return require('system').os.name;
+      }
+      if (process) {
+        return process.platform;
+      }
+      return '';
+    }());
 
     /** Detects if running in a PhantomJS web page */
     var isPhantomPage = typeof context.callPhantom == 'function';
 
+    /** Detects if QUnit Extras should log to the console */
+    var isSilent = document && !isPhantomPage;
+
+    /** Used to indicate if running in Windows */
+    var isWindows = /win/i.test(os);
+
     /** Used to display the wait throbber */
-    var throbberId,
-        throbberDelay = 500,
+    var throbberDelay = 500,
         waitCount = -1;
 
     /** Shorten `context.QUnit.QUnit` to `context.QUnit` */
@@ -153,9 +194,9 @@
      * @private
      * @param {Function|string} fn The function to call.
      * @param {number} delay The number of milliseconds to delay the `fn` call.
-     * @param [arg1, arg2, ...] Arguments to invoke `fn` with.
+     * @param {Array} args Arguments to invoke `fn` with.
      * @param {boolean} repeated A flag to specify whether `fn` is called repeatedly.
-     * @returns {number} The the ID of the timeout.
+     * @returns {number} The ID of the timeout.
      */
     function schedule(fn, delay, args, repeated) {
       // Rhino 1.7RC4 will error assigning `task` below
@@ -203,8 +244,8 @@
      * @memberOf context
      * @param {Function|string} fn The function to call or string to evaluate.
      * @param {number} delay The number of milliseconds to delay each `fn` call.
-     * @param [arg1, arg2, ...] Arguments to invoke `fn` with.
-     * @returns {number} The the ID of the timeout.
+     * @param {...*} [args] Arguments to invoke `fn` with.
+     * @returns {number} The ID of the timeout.
      */
     function setInterval(fn, delay) {
       return schedule(fn, delay, slice.call(arguments, 2), true);
@@ -216,14 +257,29 @@
      * @memberOf context
      * @param {Function|string} fn The function to call or string to evaluate.
      * @param {number} delay The number of milliseconds to delay the `fn` call.
-     * @param [arg1, arg2, ...] Arguments to invoke `fn` with.
-     * @returns {number} The the ID of the timeout.
+     * @param {...*} [args] Arguments to invoke `fn` with.
+     * @returns {number} The ID of the timeout.
      */
     function setTimeout(fn, delay) {
       return schedule(fn, delay, slice.call(arguments, 2));
     }
 
     /*------------------------------------------------------------------------*/
+
+    /**
+     * Adds text color to the terminal output of `string`.
+     *
+     * @private
+     * @param {string} colorName The name of the color to add.
+     * @param {string} string The string to add colors to.
+     * @returns {string} Returns the colored string.
+     */
+    function color(colorName, string) {
+      var code = colorCodes[colorName];
+      return isWindows
+        ? string
+        : ('\x1b[' + code + 'm' + string + '\x1b[0m');
+    }
 
     /**
      * Writes an inline message to standard output.
@@ -282,28 +338,29 @@
     QUnit.config.excused = {};
 
     /**
-     * An object used to hold information about the current running test.
+     * An object used to hold "extras" information about the current running test.
      *
      * @memberOf QUnit.config
      * @type Object
      */
-    QUnit.config.testStats = {
+    QUnit.config.extrasData = {
 
       /**
-       * An array of test summaries.
+       * An array of details for each log entry.
        *
-       * @memberOf QUnit.config.testStats
+       * @memberOf QUnit.config.extrasData
        * @type Array
        */
-      'assertions': []
+      'logEntries': []
     };
 
-    /**
-     * A callback triggered at the start of every test.
-     *
-     * @memberOf QUnit
-     * @param {Object} details An object with `module` and `name` properties.
-     */
+    // add a callback to be triggered when all testing has completed
+    QUnit.done(function(details) {
+      // assign results to `global_test_results` for Sauce Labs
+      context.global_test_results = details;
+    });
+
+    // add a callback to be triggered at the start of every test
     QUnit.testStart(function(details) {
       var excused = QUnit.config.excused || {},
           excusedTests = excused[details.module],
@@ -317,18 +374,24 @@
         test.retries = 0;
         test.finish = function() {
           var asserts = this.assertions,
+              config = QUnit.config,
               index = -1,
               length = asserts.length,
-              queue = QUnit.config.queue;
+              entries = config.extrasData.logEntries,
+              queue = config.queue;
 
           while (++index < length) {
             var assert = asserts[index];
-            if (!assert.result && this.retries < QUnit.config.asyncRetries) {
+            if (!assert.result && this.retries < config.asyncRetries) {
+              if (!isSilent) {
+                entries.length -= asserts.length;
+              }
               this.retries++;
               asserts.length = 0;
 
               var oldLength = queue.length;
               this.queue();
+
               unshift.apply(queue, queue.splice(oldLength, queue.length - oldLength));
               return;
             }
@@ -372,17 +435,14 @@
       };
     });
 
+    // replace poisoned `raises` method
+    context.raises = QUnit.raises = QUnit['throws'] || QUnit.raises;
+
     /*------------------------------------------------------------------------*/
 
     // add logging extras
-    if (isPhantomPage || !document) {
-
-      /**
-       * A logging callback triggered when all testing is completed.
-       *
-       * @memberOf QUnit
-       * @param {Object} details An object with properties `failed`, `passed`, `runtime`, and `total`.
-       */
+    if (!isSilent) {
+      // add a callback to be triggered when all testing has completed
       QUnit.done(function() {
         var ran;
         return function(details) {
@@ -393,15 +453,17 @@
           }
           ran = true;
 
+          var failures = details.failed;
+
           logInline('');
           console.log(hr);
-          console.log('    PASS: ' + details.passed + '  FAIL: ' + details.failed + '  TOTAL: ' + details.total);
-          console.log('    Finished in ' + details.runtime + ' milliseconds.');
+          console.log(color('blue', '    PASS: ' + details.passed + '  FAIL: ' + failures + '  TOTAL: ' + details.total));
+          console.log(color(failures ? 'red' : 'green','    Finished in ' + details.runtime + ' milliseconds.'));
           console.log(hr);
 
           // exit out of Node.js or PhantomJS
           try {
-            if (details.failed) {
+            if (failures) {
               process.exit(1);
             } else {
               process.exit(0);
@@ -410,7 +472,7 @@
 
           // exit out of Narwhal, Rhino, or RingoJS
           try {
-            if (details.failed) {
+            if (failures) {
               java.lang.System.exit(1);
             } else {
               quit();
@@ -419,35 +481,12 @@
         };
       }());
 
-      /**
-       * A logging callback triggered after every assertion.
-       *
-       * @memberOf QUnit
-       * @param {Object} details An object with properties `actual`, `expected`, `message`, and `result`.
-       */
+      // add a callback to be triggered after every assertion
       QUnit.log(function(details) {
-        var expected = details.expected,
-            result = details.result,
-            type = typeof expected != 'undefined' ? 'EQ' : 'OK';
-
-        var assertion = [
-          result ? 'PASS' : 'FAIL',
-          type,
-          details.message || 'ok'
-        ];
-
-        if (!result && type == 'EQ') {
-          assertion.push('Expected: ' + expected + ', Actual: ' + details.actual);
-        }
-        QUnit.config.testStats.assertions.push(assertion.join(' | '));
+        QUnit.config.extrasData.logEntries.push(details);
       });
 
-      /**
-       * A logging callback triggered at the start of every test module.
-       *
-       * @memberOf QUnit
-       * @param {Object} details An object with property `name`.
-       */
+      // add a callback to be triggered at the start of every test module
       QUnit.moduleStart(function(details) {
         // reset the `modulePrinted` flag
         var newModuleName = details.name;
@@ -455,37 +494,56 @@
           moduleName = newModuleName;
           modulePrinted = false;
         }
-        // initialize the wait throbber
-        if (!throbberId) {
-          throbberId = context.setInterval(logThrobber, throbberDelay);
-          logThrobber();
-        }
       });
 
-      /**
-       * A logging callback triggered after a test is completed.
-       *
-       * @memberOf QUnit
-       * @param {Object} details An object with properties `failed`, `name`, `passed`, and `total`.
-       */
+      // add a callback to be triggered after a test is completed
       QUnit.testDone(function(details) {
-        var assertions = QUnit.config.testStats.assertions,
+        var config = QUnit.config,
+            failures = details.failed,
+            hidepassed = config.hidepassed,
+            entries = config.extrasData.logEntries.slice(),
             testName = details.name;
 
-        if (details.failed > 0) {
-          logInline('');
-          if (!modulePrinted) {
-            modulePrinted = true;
-            console.log(hr);
-            console.log(moduleName);
-            console.log(hr);
-          }
-          console.log(' FAIL - '+ testName);
-          assertions.forEach(function(value) {
-            console.log('    ' + value);
-          });
+        config.extrasData.logEntries.length = 0;
+
+        if (hidepassed && !failures) {
+          return;
         }
-        assertions.length = 0;
+        logInline('');
+        if (!modulePrinted) {
+          modulePrinted = true;
+          console.log(hr);
+          console.log(color('blue', moduleName));
+          console.log(hr);
+        }
+        console.log(' ' + (failures ? color('red', 'FAIL') : color('green', 'PASS')) + ' - ' + color('blue', testName));
+
+        if (!failures) {
+          return;
+        }
+        var index = -1,
+            length = entries.length;
+
+        while(++index < length) {
+          var entry = entries[index];
+          if (hidepassed && entry.result) {
+            continue;
+          }
+          var expected = entry.expected,
+              result = entry.result,
+              type = typeof expected != 'undefined' ? 'EQ' : 'OK';
+
+          var message = [
+            result ? color('green', 'PASS') : color('red', 'FAIL'),
+            color('blue', type),
+            color('blue', entry.message || 'ok')
+          ];
+
+          if (!result && type == 'EQ') {
+            message.push(color('blue', 'Expected: ' + expected + ', Actual: ' + entry.actual));
+          }
+          console.log('    ' + message.join(' | '));
+        }
       });
 
       /**
@@ -499,14 +557,13 @@
       QUnit.jsDump.parsers.object = (function() {
         var func = QUnit.jsDump.parsers.object;
         return function(object) {
-          // fork to support Rhino's error objects
-          if (typeof object.rhinoException == 'object') {
-            return object.name +
-              ' { message: "' + object.message +
-              '", fileName: "' + object.fileName +
-              '", lineNumber: ' + object.lineNumber + ' }';
+          if (typeof object.rhinoException != 'object') {
+            return func(object);
           }
-          return func(object);
+          return object.name +
+            ' { message: "' + object.message +
+            '", fileName: "' + object.fileName +
+            '", lineNumber: ' + object.lineNumber + ' }';
         };
       }());
     }
@@ -543,9 +600,6 @@
         }());
       } catch(e) { }
 
-      // add `console.log` support to Narwhal, Rhino, and RingoJS
-      console || (console = context.console = { 'log': context.print });
-
       // expose shortcuts
       // exclude `module` because some environments have it as a built-in object
       ('asyncTest deepEqual equal equals expect notDeepEqual notEqual notStrictEqual ' +
@@ -553,6 +607,14 @@
         context[methodName] = QUnit[methodName];
       });
 
+      // add `console.log` support to Narwhal, Rhino, and RingoJS
+      if (!console) {
+        console = context.console = { 'log': context.print };
+      }
+      // start log throbber
+      if (!isSilent) {
+        context.setInterval(logThrobber, throbberDelay);
+      }
       // must call `QUnit.start` in the test file if not loaded in a browser
       QUnit.config.autostart = false;
       QUnit.init();
@@ -561,10 +623,10 @@
 
   /*--------------------------------------------------------------------------*/
 
-  // expose QUnit extras
-  if (freeExports && !freeExports.nodeType) {
+  // export QUnit Extras
+  if (freeExports) {
     freeExports.runInContext = runInContext;
   } else {
     runInContext(root);
   }
-}(this));
+}.call(this));

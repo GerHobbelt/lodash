@@ -1,46 +1,60 @@
 /*!
  * Benchmark.js v1.0.0 <http://benchmarkjs.com/>
- * Copyright 2010-2013 Mathias Bynens <http://mths.be/>
+ * Copyright 2010-2014 Mathias Bynens <http://mths.be/>
  * Based on JSLitmus.js, copyright Robert Kieffer <http://broofa.com/>
  * Modified by John-David Dalton <http://allyoucanleet.com/>
  * Available under MIT license <http://mths.be/mit>
  */
-;(function(root, undefined) {
+;(function() {
   'use strict';
 
+  /** Used as a safe reference for `undefined` in pre ES5 environments */
+  var undefined;
+
+  /** Used to determine if values are of the language type Object */
+  var objectTypes = {
+    'function': true,
+    'object': true
+  };
+
+  /** Used as a reference to the global object */
+  var root = (objectTypes[typeof window] && window) || this;
+
   /** Detect free variable `define` */
-  var freeDefine = typeof define == 'function' &&
-    typeof define.amd == 'object' && define.amd && define;
+  var freeDefine = typeof define == 'function' && typeof define.amd == 'object' && define.amd && define;
 
   /** Detect free variable `exports` */
-  var freeExports = typeof exports == 'object' && exports;
+  var freeExports = objectTypes[typeof exports] && exports && !exports.nodeType && exports;
 
   /** Detect free variable `module` */
-  var freeModule = typeof module == 'object' && module && module.exports == freeExports && module;
+  var freeModule = objectTypes[typeof module] && module && !module.nodeType && module;
+
+  /** Detect free variable `global` from Node.js or Browserified code and use it as `root` */
+  var freeGlobal = freeExports && freeModule && typeof global == 'object' && global;
+  if (freeGlobal && (freeGlobal.global === freeGlobal || freeGlobal.window === freeGlobal || freeGlobal.self === freeGlobal)) {
+    root = freeGlobal;
+  }
 
   /** Detect free variable `require` */
   var freeRequire = typeof require == 'function' && require;
 
-  /** Detect free variable `global`, from Node.js or Browserified code, and use it as `root` */
-  var freeGlobal = typeof global == 'object' && global;
-  if (freeGlobal.global === freeGlobal || freeGlobal.window === freeGlobal) {
-    root = freeGlobal;
-  }
-
   /** Used to assign each benchmark an incrimented id */
   var counter = 0;
 
-  /** Used to make every compiled test unique */
-  var uidCounter = 0;
+  /** Detect the popular CommonJS extension `module.exports` */
+  var moduleExports = freeModule && freeModule.exports === freeExports && freeExports;
 
   /** Used to detect primitive types */
   var rePrimitive = /^(?:boolean|number|string|undefined)$/;
+
+  /** Used to make every compiled test unique */
+  var uidCounter = 0;
 
   /** Used to assign default `context` object properties */
   var contextProps = [
     'Array', 'Date', 'Function', 'Math', 'Object', 'RegExp', 'String', '_',
     'clearTimeout', 'chrome', 'chromium', 'document', 'java', 'navigator',
-    'performance', 'platform', 'process', 'runtime', 'setTimeout'
+    'phantom', 'platform', 'process', 'runtime', 'setTimeout'
   ];
 
   /** Used to avoid hz of Infinity */
@@ -106,10 +120,10 @@
    * @static
    * @memberOf Benchmark
    * @param {Object} [context=root] The context object.
-   * @returns {Function} Returns the `Benchmark` function.
+   * @returns {Function} Returns a new `Benchmark` function.
    */
   function runInContext(context) {
-    // exit early if unable to acquire lodash
+    // exit early if unable to acquire Lo-Dash
     var _ = context && context._ || req('lodash') || root._;
     if (!_) {
       Benchmark.runInContext = runInContext;
@@ -147,31 +161,23 @@
         shift = arrayRef.shift,
         slice = arrayRef.slice,
         sqrt = Math.sqrt,
-        toString = objectProto.toString;
+        toString = objectProto.toString,
+        unshift = arrayRef.unshift;
 
     /** Detect DOM document object */
     var doc = isHostType(context, 'document') && context.document;
 
-    /** Used to access Wade Simmons' Node microtime module */
+    /** Used to access Wade Simmons' Node.js `microtime` module */
     var microtimeObject = req('microtime');
 
-    /** Used to access the browser's high resolution timer */
-    var perfObject = isHostType(context, 'performance') && context.performance;
-
-    /** Used to call the browser's high resolution timer */
-    var perfName = perfObject && (
-      perfObject.now && 'now' ||
-      perfObject.webkitNow && 'webkitNow'
-    );
-
-    /** Used to access Node's high resolution timer */
+    /** Used to access Node.js's high resolution timer */
     var processObject = isHostType(context, 'process') && context.process;
 
     /** Used to prevent a `removeChild` memory leak in IE < 9 */
     var trash = doc && doc.createElement('div');
 
     /** Used to integrity check compiled tests */
-    var uid = 'uid' + (+new Date);
+    var uid = 'uid' + _.now();
 
     /** Used to avoid infinite recursion when methods call each other */
     var calledBy = {};
@@ -188,15 +194,7 @@
     (function() {
 
       /**
-       * Detect Adobe AIR.
-       *
-       * @memberOf Benchmark.support
-       * @type boolean
-       */
-      support.air = isClassOf(context.runtime, 'ScriptBridgingProxyObject');
-
-      /**
-       * Detect if in a browser environment.
+       * Detect if running in a browser environment.
        *
        * @memberOf Benchmark.support
        * @type boolean
@@ -220,7 +218,15 @@
       support.timeout = isHostType(context, 'setTimeout') && isHostType(context, 'clearTimeout');
 
       /**
-       * Detect if functions support decompilation.
+       * Detect if `Array#unshift` returns the new length of the array (all but IE < 8).
+       *
+       * @memberOf Benchmark.support
+       * @type boolean
+       */
+      support.unshiftResult = !![].unshift(1);
+
+      /**
+       * Detect if function decompilation is support.
        *
        * @name decompilation
        * @memberOf Benchmark.support
@@ -228,13 +234,15 @@
        */
       try {
         // Safari 2.x removes commas in object literals
-        // from Function#toString results
+        // from `Function#toString` results
         // http://webk.it/11609
         // Firefox 3.6 and Opera 9.25 strip grouping
-        // parentheses from Function#toString results
+        // parentheses from `Function#toString` results
         // http://bugzil.la/559438
         support.decompilation = Function(
-          'return (' + (function(x) { return { 'x': '' + (1 + x) + '', 'y': 0 }; }) + ')'
+          ('return (' + (function(x) { return { 'x': '' + (1 + x) + '', 'y': 0 }; }) + ')')
+          // avoid issues with code added by Istanbul
+          .replace(/__cov__[^;]+;/g, '')
         )()(0).x === '1';
       } catch(e) {
         support.decompilation = false;
@@ -282,6 +290,14 @@
     /**
      * The Benchmark constructor.
      *
+     * Note: The Benchmark constructor exposes a handful of Lo-Dash methods to
+     * make working with arrays, collections, and objects easier. The Lo-Dash
+     * methods are:
+     * [`each/forEach`](http://lodash.com/docs#forEach), [`forOwn`](http://lodash.com/docs#forOwn),
+     * [`has`](http://lodash.com/docs#has), [`indexOf`](http://lodash.com/docs#indexOf),
+     * [`map`](http://lodash.com/docs#map), [`pluck`](http://lodash.com/docs#pluck),
+     * and [`reduce`](http://lodash.com/docs#reduce)
+     *
      * @constructor
      * @param {string} name A name to identify the benchmark.
      * @param {Function|string} fn The test to benchmark.
@@ -297,7 +313,7 @@
      * // or with options
      * var bench = new Benchmark('foo', fn, {
      *
-     *   // displayed by Benchmark#toString if `name` is not available
+     *   // displayed by `Benchmark#toString` if `name` is not available
      *   'id': 'xyz',
      *
      *   // called when the benchmark starts running
@@ -333,7 +349,7 @@
      *
      *   // benchmark test function
      *   'fn': function(deferred) {
-     *     // call resolve() when the deferred test is finished
+     *     // call `Deferred#resolve` when the deferred test is finished
      *     deferred.resolve();
      *   }
      * });
@@ -350,7 +366,7 @@
      *
      * // a test's `this` binding is set to the benchmark instance
      * var bench = new Benchmark('foo', function() {
-     *   'My name is '.concat(this.name); // My name is foo
+     *   'My name is '.concat(this.name); // "My name is foo"
      * });
      */
     function Benchmark(name, fn, options) {
@@ -414,16 +430,22 @@
      */
     function Event(type) {
       var event = this;
+      if (type instanceof Event) {
+        return type;
+      }
       return (event == null || event.constructor != Event)
         ? new Event(type)
-        : (type instanceof Event
-            ? type
-            : _.extend(event, { 'timeStamp': +new Date }, typeof type == 'string' ? { 'type': type } : type)
-          );
+        : _.assign(event, { 'timeStamp': _.now() }, typeof type == 'string' ? { 'type': type } : type);
     }
 
     /**
      * The Suite constructor.
+     *
+     * Note: Each Suite instance has a handful of wrapped Lo-Dash methods to
+     * make working with Suites easier. The wrapped Lo-Dash methods are:
+     * [`each/forEach`](http://lodash.com/docs#forEach), [`indexOf`](http://lodash.com/docs#indexOf),
+     * [`map`](http://lodash.com/docs#map), [`pluck`](http://lodash.com/docs#pluck),
+     * and [`reduce`](http://lodash.com/docs#reduce)
      *
      * @constructor
      * @memberOf Benchmark
@@ -467,7 +489,7 @@
         return new Suite(name, options);
       }
       // juggle arguments
-      if (isClassOf(name, 'Object')) {
+      if (_.isPlainObject(name)) {
         // 1 argument (options)
         options = name;
       } else {
@@ -487,7 +509,7 @@
      * @returns {*} The cloned value.
      */
     var cloneDeep = _.partialRight(_.cloneDeep, function(value) {
-      // do not clone non-Object objects
+      // only clone primitives, arrays, and plain objects
       return (typeof value == 'object' && !_.isArray(value) && !_.isPlainObject(value))
         ? value
         : undefined;
@@ -515,7 +537,7 @@
       };
       // fix JaegerMonkey bug
       // http://bugzil.la/639720
-      createFunction = support.browser && (createFunction('', 'return"' + uid + '"') || noop)() == uid ? createFunction : Function;
+      createFunction = support.browser && (createFunction('', 'return"' + uid + '"') || _.noop)() == uid ? createFunction : Function;
       return createFunction.apply(null, arguments);
     }
 
@@ -571,22 +593,21 @@
      *
      * @private
      * @param {Function} fn The function.
-     * @param {string} altSource A string used when a function's source code is unretrievable.
      * @returns {string} The function's source code.
      */
-    function getSource(fn, altSource) {
-      var result = altSource;
+    function getSource(fn) {
+      var result = '';
       if (isStringable(fn)) {
         result = String(fn);
       } else if (support.decompilation) {
         // escape the `{` for Firefox 1
-        result = (/^[^{]+\{([\s\S]*)\}\s*$/.exec(fn) || 0)[1];
+        result = _.result(/^[^{]+\{([\s\S]*)\}\s*$/.exec(fn), 1);
       }
       // trim string
       result = (result || '').replace(/^\s+|\s+$/g, '');
 
       // detect strings containing only the "use strict" directive
-      return /^(?:\/\*+[\w|\W]*?\*\/|\/\/.*?[\n\r\u2028\u2029]|\s)*(["'])use strict\1;?$/.test(result)
+      return /^(?:\/\*+[\w\W]*?\*\/|\/\/.*?[\n\r\u2028\u2029]|\s)*(["'])use strict\1;?$/.test(result)
         ? ''
         : result;
     }
@@ -629,20 +650,11 @@
      * @returns {boolean} Returns `true` if the value can be coerced, else `false`.
      */
     function isStringable(value) {
-      return _.has(value, 'toString') || isClassOf(value, 'String');
+      return _.isString(value) || (_.has(value, 'toString') && _.isFunction(value.toString));
     }
 
     /**
-     * A no-operation function.
-     *
-     * @private
-     */
-    function noop() {
-      // no operation performed
-    }
-
-    /**
-     * A wrapper around require() to suppress `module missing` errors.
+     * A wrapper around `require()` to suppress `module missing` errors.
      *
      * @private
      * @param {string} id The module id.
@@ -694,8 +706,9 @@
      * @param {Object} [options={}] Options object.
      */
     function setOptions(object, options) {
-      options = _.extend({}, object.constructor.options, options);
-      object.options = _.forOwn(options, function(value, key) {
+      options = object.options = _.assign({}, cloneDeep(object.constructor.options), cloneDeep(options));
+
+      _.forOwn(options, function(value, key) {
         if (value != null) {
           // add event listeners
           if (/^on[A-Z]/.test(key)) {
@@ -806,7 +819,7 @@
      * @memberOf Benchmark
      * @param {Array} benches Array of benchmarks to iterate over.
      * @param {Object|string} name The name of the method to invoke OR options object.
-     * @param {...*} [arg] Arguments to invoke the method with.
+     * @param {...*} [args] Arguments to invoke the method with.
      * @returns {Array} A new array of values returned from each method invoked.
      * @example
      *
@@ -844,7 +857,7 @@
           queued,
           index = -1,
           eventProps = { 'currentTarget': benches },
-          options = { 'onStart': noop, 'onCycle': noop, 'onComplete': noop },
+          options = { 'onStart': _.noop, 'onCycle': _.noop, 'onComplete': _.noop },
           result = _.toArray(benches);
 
       /**
@@ -862,7 +875,7 @@
         }
         // execute method
         result[index] = _.isFunction(bench && bench[name]) ? bench[name].apply(bench, args) : undefined;
-        // if synchronous return true until finished
+        // if synchronous return `true` until finished
         return !async && getNext();
       }
 
@@ -945,7 +958,7 @@
         args = slice.call(arguments, 2);
       } else {
         // 2 arguments (array, options)
-        options = _.extend(options, name);
+        options = _.assign(options, name);
         name = options.name;
         args = _.isArray(args = 'args' in options ? options.args : []) ? args : [args];
         queued = options.queued;
@@ -1092,7 +1105,7 @@
      */
     function cloneSuite(options) {
       var suite = this,
-          result = new suite.constructor(_.extend({}, suite.options, options));
+          result = new suite.constructor(_.assign({}, suite.options, options));
 
       // copy own properties
       _.forOwn(suite, function(value, key) {
@@ -1115,7 +1128,7 @@
      */
     function filterSuite(callback) {
       var suite = this,
-          result = new suite.constructor;
+          result = new suite.constructor(suite.options);
 
       result.push.apply(result, filter(suite, callback));
       return result;
@@ -1202,6 +1215,7 @@
      *
      * @memberOf Benchmark, Benchmark.Suite
      * @param {Object|string} type The event type or object.
+     * @param {...*} [args] Arguments to invoke the listener with.
      * @returns {*} Returns the return value of the last listener executed.
      */
     function emit(type) {
@@ -1371,11 +1385,10 @@
      */
     function clone(options) {
       var bench = this,
-          sample = bench.stats.sample,
-          result = new bench.constructor(_.extend({}, bench, options));
+          result = new bench.constructor(_.assign({}, bench, options));
 
       // correct the `options` object
-      result.options = _.extend({}, bench.options, options);
+      result.options = _.assign({}, cloneDeep(bench.options), cloneDeep(options));
 
       // copy own custom properties
       _.forOwn(bench, function(value, key) {
@@ -1448,70 +1461,72 @@
      * @returns {Object} The benchmark instance.
      */
     function reset() {
-      var data,
-          event,
-          bench = this,
-          index = 0,
-          changes = { 'length': 0 },
-          queue = { 'length': 0 };
-
+      var bench = this;
       if (bench.running && !calledBy.abort) {
         // no worries, `reset()` is called within `abort()`
         calledBy.reset = true;
         bench.abort();
         delete calledBy.reset;
+        return bench;
       }
-      else {
-        // a non-recursive solution to check if properties have changed
-        // http://www.jslab.dk/articles/non.recursive.preorder.traversal.part4
-        data = { 'destination': bench, 'source': _.extend({}, bench.constructor.prototype, bench.options) };
-        do {
-          _.forOwn(data.source, function(value, key) {
-            var changed,
-                destination = data.destination,
-                currValue = destination[key];
+      var event,
+          index = 0,
+          changes = { 'length': 0 },
+          queue = { 'length': 0 };
 
-            // skip pseudo private properties like `_timerId` which could be a
-            // Java object in environments like RingoJS
-            if (key.charAt(0) == '_') {
-              return;
-            }
-            if (value && typeof value == 'object') {
-              if (_.isArray(value)) {
-                // check if an array value has changed to a non-array value
-                if (!_.isArray(currValue)) {
-                  changed = currValue = [];
-                }
-                // or has changed its length
-                if (currValue.length != value.length) {
-                  changed = currValue = currValue.slice(0, value.length);
-                  currValue.length = value.length;
-                }
-              }
-              // check if an object has changed to a non-object value
-              else if (!currValue || typeof currValue != 'object') {
-                changed = currValue = {};
-              }
-              // register a changed object
-              if (changed) {
-                changes[changes.length++] = { 'destination': destination, 'key': key, 'value': currValue };
-              }
-              queue[queue.length++] = { 'destination': currValue, 'source': value };
-            }
-            // register a changed primitive
-            else if (value !== currValue && !(value == null || _.isFunction(value))) {
-              changes[changes.length++] = { 'destination': destination, 'key': key, 'value': value };
-            }
-          });
-        }
-        while ((data = queue[index++]));
+      // a non-recursive solution to check if properties have changed
+      // http://www.jslab.dk/articles/non.recursive.preorder.traversal.part4
+      var data = {
+        'destination': bench,
+        'source': _.assign({}, cloneDeep(bench.constructor.prototype), cloneDeep(bench.options))
+      };
 
-        // if changed emit the `reset` event and if it isn't cancelled reset the benchmark
-        if (changes.length && (bench.emit(event = Event('reset')), !event.cancelled)) {
-          _.each(changes, function(data) {
-            data.destination[data.key] = data.value;
-          });
-        }
+      do {
+        _.forOwn(data.source, function(value, key) {
+          var changed,
+              destination = data.destination,
+              currValue = destination[key];
+
+          // skip pseudo private properties like `_timerId` which could be a
+          // Java object in environments like RingoJS
+          if (key.charAt(0) == '_') {
+            return;
+          }
+          if (value && typeof value == 'object') {
+            if (_.isArray(value)) {
+              // check if an array value has changed to a non-array value
+              if (!_.isArray(currValue)) {
+                changed = currValue = [];
+              }
+              // or has changed its length
+              if (currValue.length != value.length) {
+                changed = currValue = currValue.slice(0, value.length);
+                currValue.length = value.length;
+              }
+            }
+            // check if an object has changed to a non-object value
+            else if (!currValue || typeof currValue != 'object') {
+              changed = currValue = {};
+            }
+            // register a changed object
+            if (changed) {
+              changes[changes.length++] = { 'destination': destination, 'key': key, 'value': currValue };
+            }
+            queue[queue.length++] = { 'destination': currValue, 'source': value };
+          }
+          // register a changed primitive
+          else if (value !== currValue && !(value == null || _.isFunction(value))) {
+            changes[changes.length++] = { 'destination': destination, 'key': key, 'value': value };
+          }
+        });
+      }
+      while ((data = queue[index++]));
+
+      // if changed emit the `reset` event and if it isn't cancelled reset the benchmark
+      if (changes.length && (bench.emit(event = Event('reset')), !event.cancelled)) {
+        _.each(changes, function(data) {
+          data.destination[data.key] = data.value;
+        });
       }
       return bench;
     }
@@ -1568,7 +1583,7 @@
         var bench = clone._original,
             stringable = isStringable(bench.fn),
             count = bench.count = clone.count,
-            decompilable = support.decompilation || stringable,
+            decompilable = stringable || (support.decompilation && (_.has(clone, 'setup') || _.has(clone, 'teardown'))),
             id = bench.id,
             name = bench.name || (typeof id == 'number' ? '<Test #' + id + '>' : id),
             result = 0;
@@ -1586,7 +1601,6 @@
             timer.ns = new applet.Packages.nano;
           }
         }
-
         // Compile in setup/teardown functions and the test loop.
         // Create a new compiled test, instead of using the cached `bench.compiled`,
         // to avoid potential engine optimizations enabled over the life of the test.
@@ -1608,20 +1622,20 @@
           : 'var r#,s#,m#=this,f#=m#.fn,i#=m#.count,n#=t#.ns;${setup}\n${begin};' +
             'while(i#--){${fn}\n}${end};${teardown}\nreturn{elapsed:r#,uid:"${uid}"}';
 
-        var compiled = bench.compiled = clone.compiled = createCompiled(bench, deferred, funcBody),
+        var compiled = bench.compiled = clone.compiled = createCompiled(bench, decompilable, deferred, funcBody),
             isEmpty = !(templateData.fn || stringable);
 
         try {
           if (isEmpty) {
-            // Firefox may remove dead code from Function#toString results
+            // Firefox may remove dead code from `Function#toString` results
             // http://bugzil.la/536085
             throw new Error('The test "' + name + '" is empty. This may be the result of dead code removal.');
           }
           else if (!deferred) {
-            // pretest to determine if compiled code is exits early, usually by a
+            // pretest to determine if compiled code exits early, usually by a
             // rogue `return` statement, by checking for a return object with the uid
             bench.count = 1;
-            compiled = (compiled.call(bench, context, timer) || {}).uid == templateData.uid && compiled;
+            compiled = decompilable && (compiled.call(bench, context, timer) || {}).uid == templateData.uid && compiled;
             bench.count = count;
           }
         } catch(e) {
@@ -1630,16 +1644,16 @@
           bench.count = count;
         }
         // fallback when a test exits early or errors during pretest
-        if (decompilable && !compiled && !deferred && !isEmpty) {
+        if (!compiled && !deferred && !isEmpty) {
           funcBody = (
-            clone.error && !stringable
-              ? 'var r#,s#,m#=this,f#=m#.fn,i#=m#.count'
-              : 'function f#(){${fn}\n}var r#,s#,m#=this,i#=m#.count'
+            stringable || (decompilable && !clone.error)
+              ? 'function f#(){${fn}\n}var r#,s#,m#=this,i#=m#.count'
+              : 'var r#,s#,m#=this,f#=m#.fn,i#=m#.count'
             ) +
             ',n#=t#.ns;${setup}\n${begin};m#.f#=f#;while(i#--){m#.f#()}${end};' +
             'delete m#.f#;${teardown}\nreturn{elapsed:r#}';
 
-          compiled = createCompiled(bench, deferred, funcBody);
+          compiled = createCompiled(bench, decompilable, deferred, funcBody);
 
           try {
             // pretest one more time to check for errors
@@ -1657,7 +1671,7 @@
         }
         // if no errors run the full test loop
         if (!clone.error) {
-          compiled = bench.compiled = clone.compiled = createCompiled(bench, deferred, funcBody);
+          compiled = bench.compiled = clone.compiled = createCompiled(bench, decompilable, deferred, funcBody);
           result = compiled.call(deferred || bench, context, timer).elapsed;
         }
         return result;
@@ -1668,28 +1682,28 @@
       /**
        * Creates a compiled function from the given function `body`.
        */
-      function createCompiled(bench, deferred, body) {
+      function createCompiled(bench, decompilable, deferred, body) {
         var fn = bench.fn,
             fnArg = deferred ? getFirstArgument(fn) || 'deferred' : '';
 
         templateData.uid = uid + uidCounter++;
 
-        _.extend(templateData, {
-          'setup': getSource(bench.setup, interpolate('m#.setup()')),
-          'fn': getSource(fn, interpolate('m#.fn(' + fnArg + ')')),
+        _.assign(templateData, {
+          'setup': decompilable ? getSource(bench.setup) : interpolate('m#.setup()'),
+          'fn': decompilable ? getSource(fn) : interpolate('m#.fn(' + fnArg + ')'),
           'fnArg': fnArg,
-          'teardown': getSource(bench.teardown, interpolate('m#.teardown()'))
+          'teardown': decompilable ? getSource(bench.teardown) : interpolate('m#.teardown()')
         });
 
         // use API of chosen timer
         if (timer.unit == 'ns') {
           if (timer.ns.nanoTime) {
-            _.extend(templateData, {
+            _.assign(templateData, {
               'begin': interpolate('s#=n#.nanoTime()'),
               'end': interpolate('r#=(n#.nanoTime()-s#)/1e9')
             });
           } else {
-            _.extend(templateData, {
+            _.assign(templateData, {
               'begin': interpolate('s#=n#()'),
               'end': interpolate('r#=n#(s#);r#=r#[0]+(r#[1]/1e9)')
             });
@@ -1697,26 +1711,27 @@
         }
         else if (timer.unit == 'us') {
           if (timer.ns.stop) {
-            _.extend(templateData, {
+            _.assign(templateData, {
               'begin': interpolate('s#=n#.start()'),
               'end': interpolate('r#=n#.microseconds()/1e6')
             });
-          } else if (perfName) {
-            _.extend(templateData, {
-              'begin': interpolate('s#=n#.' + perfName + '()'),
-              'end': interpolate('r#=(n#.' + perfName + '()-s#)/1e3')
-            });
           } else {
-            _.extend(templateData, {
+            _.assign(templateData, {
               'begin': interpolate('s#=n#()'),
               'end': interpolate('r#=(n#()-s#)/1e6')
             });
           }
         }
+        else if (timer.ns.now) {
+          _.assign(templateData, {
+            'begin': interpolate('s#=n#.now()'),
+            'end': interpolate('r#=(n#.now()-s#)/1e3')
+          });
+        }
         else {
-          _.extend(templateData, {
-            'begin': interpolate('s#=new n#'),
-            'end': interpolate('r#=(new n#-s#)/1e3')
+          _.assign(templateData, {
+            'begin': interpolate('s#=new n#().getTime()'),
+            'end': interpolate('r#=(new n#().getTime()-s#)/1e3')
           });
         }
         // define `timer` methods
@@ -1756,9 +1771,6 @@
             if (ns.stop) {
               ns.start();
               while (!(measured = ns.microseconds())) { }
-            } else if (ns[perfName]) {
-              divisor = 1e3;
-              measured = Function('n', 'var r,s=n.' + perfName + '();while(!(r=n.' + perfName + '()-s)){};return r')(ns);
             } else {
               begin = ns();
               while (!(measured = ns() - begin)) { }
@@ -1775,11 +1787,15 @@
               divisor = 1;
             }
           }
-          else {
-            begin = new ns;
-            while (!(measured = new ns - begin)) { }
+          else if (ns.now) {
+            begin = ns.now();
+            while (!(measured = ns.now() - begin)) { }
           }
-          // check for broken timers (nanoTime may have issues)
+          else {
+            begin = new ns().getTime();
+            while (!(measured = new ns().getTime() - begin)) { }
+          }
+          // check for broken timers (`nanoTime` may have issues)
           // http://alivebutsleepy.srnet.cz/unreliable-system-nanotime/
           if (measured > 0) {
             sample.push(measured);
@@ -1823,25 +1839,16 @@
         }
       } catch(e) { }
 
-      // detect `performance.now` microsecond resolution timer
-      if ((timer.ns = perfName && perfObject)) {
-        timers.push({ 'ns': timer.ns, 'res': getRes('us'), 'unit': 'us' });
-      }
-
-      // detect Node's nanosecond resolution timer available in Node >= 0.8
+      // detect Node.js's nanosecond resolution timer available in Node.js >= 0.8
       if (processObject && typeof (timer.ns = processObject.hrtime) == 'function') {
         timers.push({ 'ns': timer.ns, 'res': getRes('ns'), 'unit': 'ns' });
       }
-
-      // detect Wade Simmons' Node microtime module
+      // detect Wade Simmons' Node.js `microtime` module
       if (microtimeObject && typeof (timer.ns = microtimeObject.now) == 'function') {
         timers.push({ 'ns': timer.ns,  'res': getRes('us'), 'unit': 'us' });
       }
-
       // pick timer with highest resolution
-      timer = _.reduce(timers, function(timer, other) {
-        return other.res < timer.res ? other : timer;
-      });
+      timer = _.min(timers, 'res');
 
       // remove unused applet
       if (timer.unit != 'ns' && applet) {
@@ -1936,7 +1943,7 @@
             variance,
             clone = event.target,
             done = bench.aborted,
-            now = +new Date,
+            now = _.now(),
             size = sample.push(clone.times.period),
             maxedOut = size >= minSamples && (elapsed += now - clone.times.timeStamp) / 1e3 > bench.maxTime,
             times = bench.times,
@@ -1965,7 +1972,7 @@
           // relative margin of error
           rme = (moe / mean) * 100 || 0;
 
-          _.extend(bench.stats, {
+          _.assign(bench.stats, {
             'deviation': sd,
             'mean': mean,
             'moe': moe,
@@ -1996,7 +2003,7 @@
         if (queue.length < 2 && !maxedOut) {
           enqueue();
         }
-        // abort the invoke cycle when done
+        // abort the `invoke` cycle when done
         event.aborted = done;
       }
 
@@ -2141,7 +2148,7 @@
       bench.running = true;
 
       bench.count = bench.initCount;
-      bench.times.timeStamp = +new Date;
+      bench.times.timeStamp = _.now();
       bench.emit(event);
 
       if (!event.cancelled) {
@@ -2170,8 +2177,8 @@
     // The bugginess continues as the `Benchmark` constructor has an argument
     // named `options` and Firefox 1 will not assign a value to `Benchmark.options`,
     // making it non-writable in the process, unless it is the first property
-    // assigned by for-in loop of `_.extend()`.
-    _.extend(Benchmark, {
+    // assigned by for-in loop of `_.assign()`.
+    _.assign(Benchmark, {
 
       /**
        * The default options copied by benchmark instances.
@@ -2207,7 +2214,7 @@
         'delay': 0.005,
 
         /**
-         * Displayed by Benchmark#toString when a `name` is not available
+         * Displayed by `Benchmark#toString` when a `name` is not available
          * (auto-generated if absent).
          *
          * @memberOf Benchmark.options
@@ -2308,7 +2315,7 @@
 
       /**
        * Platform object with properties describing things like browser name,
-       * version, and operating system.
+       * version, and operating system. See [`platform.js`](http://mths.be/platform).
        *
        * @static
        * @memberOf Benchmark
@@ -2338,7 +2345,7 @@
       'version': '1.0.0'
     });
 
-    _.extend(Benchmark, {
+    _.assign(Benchmark, {
       'filter': filter,
       'formatNumber': formatNumber,
       'invoke': invoke,
@@ -2354,7 +2361,7 @@
 
     /*------------------------------------------------------------------------*/
 
-    _.extend(Benchmark.prototype, {
+    _.assign(Benchmark.prototype, {
 
       /**
        * The number of times a test was executed.
@@ -2481,7 +2488,7 @@
        *   }())
        * }())
        */
-      'setup': noop,
+      'setup': _.noop,
 
       /**
        * Compiled into the test and executed immediately **after** the test loop.
@@ -2489,7 +2496,7 @@
        * @memberOf Benchmark
        * @type {Function|string}
        */
-      'teardown': noop,
+      'teardown': _.noop,
 
       /**
        * An object of stats including mean, margin or error, and standard deviation.
@@ -2598,7 +2605,7 @@
       }
     });
 
-    _.extend(Benchmark.prototype, {
+    _.assign(Benchmark.prototype, {
       'abort': abort,
       'clone': clone,
       'compare': compare,
@@ -2613,7 +2620,7 @@
 
     /*------------------------------------------------------------------------*/
 
-    _.extend(Deferred.prototype, {
+    _.assign(Deferred.prototype, {
 
       /**
        * The deferred benchmark instance.
@@ -2648,13 +2655,13 @@
       'timeStamp': 0
     });
 
-    _.extend(Deferred.prototype, {
+    _.assign(Deferred.prototype, {
       'resolve': resolve
     });
 
     /*------------------------------------------------------------------------*/
 
-    _.extend(Event.prototype, {
+    _.assign(Event.prototype, {
 
       /**
        * A flag to indicate if the emitters listener iteration is aborted.
@@ -2735,7 +2742,7 @@
 
     /*------------------------------------------------------------------------*/
 
-    _.extend(Suite.prototype, {
+    _.assign(Suite.prototype, {
 
       /**
        * The number of benchmarks in the suite.
@@ -2762,7 +2769,7 @@
       'running': false
     });
 
-    _.extend(Suite.prototype, {
+    _.assign(Suite.prototype, {
       'abort': abortSuite,
       'add': add,
       'clone': cloneSuite,
@@ -2778,16 +2785,16 @@
       'run': runSuite,
       'reverse': arrayRef.reverse,
       'shift': shift,
-      'slice': arrayRef.slice,
+      'slice': slice,
       'sort': arrayRef.sort,
       'splice': arrayRef.splice,
-      'unshift': arrayRef.unshift
+      'unshift': unshift
     });
 
     /*------------------------------------------------------------------------*/
 
     // expose Deferred, Event, and Suite
-    _.extend(Benchmark, {
+    _.assign(Benchmark, {
       'Deferred': Deferred,
       'Event': Event,
       'Suite': Suite
@@ -2822,16 +2829,21 @@
         };
       });
     }
-    // trigger clock's lazy define early to avoid a security error
-    if (support.air) {
-      clock({ '_original': { 'fn': noop, 'count': 1, 'options': {} } });
+    // avoid buggy `Array#unshift` in IE < 8 which doesn't return the new
+    // length of the array
+    if (!support.unshiftResult) {
+      Suite.prototype.unshift = function() {
+        var value = this;
+        unshift.apply(value, arguments);
+        return value.length;
+      };
     }
     return Benchmark;
   }
 
   /*--------------------------------------------------------------------------*/
 
-  // expose Benchmark
+  // export Benchmark
   // some AMD build optimizers, like r.js, check for condition patterns like the following:
   if (typeof define == 'function' && typeof define.amd == 'object' && define.amd) {
     // define as an anonymous module so, through path mapping, it can be aliased
@@ -2846,19 +2858,19 @@
     var Benchmark = runInContext();
 
     // check for `exports` after `define` in case a build optimizer adds an `exports` object
-    if (freeExports && !freeExports.nodeType) {
-      // in Node.js or RingoJS v0.8.0+
-      if (freeModule) {
+    if (freeExports && freeModule) {
+      // in Node.js or RingoJS
+      if (moduleExports) {
         (freeModule.exports = Benchmark).Benchmark = Benchmark;
       }
-      // in Narwhal or RingoJS v0.7.0-
+      // in Narwhal or Rhino -require
       else {
         freeExports.Benchmark = Benchmark;
       }
     }
-    // in a browser or Rhino
     else {
+      // in a browser or Rhino
       root.Benchmark = Benchmark;
     }
   }
-}(this));
+}.call(this));

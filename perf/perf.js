@@ -1,52 +1,56 @@
-;(function(root) {
-
-  /** Use a single "load" function */
-  var load = typeof require == 'function' ? require : root.load;
-
-  /** The file path of the Lo-Dash file to test */
-  var filePath = (function() {
-    var min = 0;
-    var result = root.phantom
-      ? phantom.args
-      : (root.system
-          ? (min = 1, system.args)
-          : (root.process ? (min = 2, process.argv) : (root.arguments || []))
-        );
-
-    var last = result[result.length - 1];
-    result = (result.length > min && !/perf(?:\.js)?$/.test(last))
-      ? last
-      : '../lodash.js';
-
-    try {
-      result = require('fs').realpathSync(result);
-    } catch(e) { }
-
-    return result;
-  }());
-
-  /** Load Lo-Dash */
-  var lodash = root.lodash || (root.lodash = (
-    lodash = load(filePath) || root._,
-    lodash = lodash._ || lodash,
-    lodash.noConflict()
-  ));
-
-  /** Load Benchmark.js */
-  var Benchmark = root.Benchmark || (root.Benchmark = (
-    Benchmark = load('../vendor/benchmark.js/benchmark.js') || root.Benchmark,
-    Benchmark = Benchmark.Benchmark || Benchmark,
-    Benchmark.runInContext(lodash.extend({}, root, { '_': lodash }))
-  ));
-
-  /** Load Underscore */
-  var _ = root._ || (root._ = (
-    _ = load('../vendor/underscore/underscore.js') || root._,
-    _._ || _
-  ));
+;(function() {
 
   /** Used to access the Firebug Lite panel (set by `run`) */
   var fbPanel;
+
+  /** Used as a safe reference for `undefined` in pre ES5 environments */
+  var undefined;
+
+  /** Used as a reference to the global object */
+  var root = typeof global == 'object' && global || this;
+
+  /** Method and object shortcuts */
+  var phantom = root.phantom,
+      amd = root.define && define.amd,
+      argv = root.process && process.argv,
+      document = !phantom && root.document,
+      noop = function() {},
+      params = root.arguments,
+      system = root.system;
+
+  /** Add `console.log()` support for Narwhal, Rhino, and RingoJS */
+  var console = root.console || (root.console = { 'log': root.print });
+
+  /** The file path of the Lo-Dash file to test */
+  var filePath = (function() {
+    var min = 0,
+        result = [];
+
+    if (phantom) {
+      result = params = phantom.args;
+    } else if (system) {
+      min = 1;
+      result = params = system.args;
+    } else if (argv) {
+      min = 2;
+      result = params = argv;
+    } else if (params) {
+      result = params;
+    }
+    var last = result[result.length - 1];
+    result = (result.length > min && !/perf(?:\.js)?$/.test(last)) ? last : '../lodash.js';
+
+    if (!amd) {
+      try {
+        result = require('fs').realpathSync(result);
+      } catch(e) { }
+
+      try {
+        result = require.resolve(result);
+      } catch(e) { }
+    }
+    return result;
+  }());
 
   /** Used to match path separators */
   var rePathSeparator = /[\/\\]/;
@@ -56,15 +60,6 @@
 
   /** Used to match RegExp special characters */
   var reSpecialChars = /[.*+?^=!:${}()|[\]\/\\]/g;
-
-  /** Used to score performance */
-  var score = { 'a': [], 'b': [] };
-
-  /** Used to queue benchmark suites */
-  var suites = [];
-
-  /** Used to resolve a value's internal [[Class]] */
-  var toString = Object.prototype.toString;
 
   /** The `ui` object */
   var ui = root.ui || (root.ui = {
@@ -81,14 +76,46 @@
     return result + (result == buildName ? ' (2)' : '');
   }());
 
+  /** Used to score performance */
+  var score = { 'a': [], 'b': [] };
+
+  /** Used to queue benchmark suites */
+  var suites = [];
+
+  /** Used to resolve a value's internal [[Class]] */
+  var toString = Object.prototype.toString;
+
   /** Detect if in a browser environment */
   var isBrowser = isHostType(root, 'document') && isHostType(root, 'navigator');
 
-  /** Detect Java environment */
+  /** Detect if in a Java environment */
   var isJava = !isBrowser && /Java/.test(toString.call(root.java));
 
-  /** Add `console.log()` support for Narwhal, Rhino, and RingoJS */
-  var console = root.console || (root.console = { 'log': root.print });
+  /** Use a single "load" function */
+  var load = (typeof require == 'function' && !amd)
+    ? require
+    : (isJava && root.load) || noop;
+
+  /** Load Lo-Dash */
+  var lodash = root.lodash || (root.lodash = (
+    lodash = load(filePath) || root._,
+    lodash = lodash._ || lodash,
+    (lodash.runInContext ? lodash.runInContext(root) : lodash),
+    lodash.noConflict()
+  ));
+
+  /** Load Benchmark.js */
+  var Benchmark = root.Benchmark || (root.Benchmark = (
+    Benchmark = load('../vendor/benchmark.js/benchmark.js') || root.Benchmark,
+    Benchmark = Benchmark.Benchmark || Benchmark,
+    Benchmark.runInContext(lodash.extend({}, root, { '_': lodash }))
+  ));
+
+  /** Load Underscore */
+  var _ = root._ || (root._ = (
+    _ = load('../vendor/underscore/underscore.js') || root._,
+    _._ || _
+  ));
 
   /*--------------------------------------------------------------------------*/
 
@@ -261,8 +288,7 @@
           lodash = global.lodash,\
           belt = this.name == buildName ? lodash : _;\
       \
-      var index,\
-          date = new Date,\
+      var date = new Date,\
           limit = 20,\
           regexp = /x/,\
           object = {},\
@@ -273,17 +299,18 @@
           nestedObjects = [{}, [{}], [{}, [[{}]]]],\
           twoNumbers = [12, 23];\
       \
-      for (index = 0; index < limit; index++) {\
+      for (var index = 0; index < limit; index++) {\
         numbers[index] = index;\
         object["key" + index] = index;\
         objects[index] = { "num": index };\
       }\
+      var strNumbers = numbers + "";\
       \
       if (typeof bind != "undefined") {\
         var thisArg = { "name": "fred" };\
         \
         var func = function(greeting, punctuation) {\
-          return greeting + " " + this.name + (punctuation || ".");\
+          return (greeting || "hi") + " " + this.name + (punctuation || ".");\
         };\
         \
         var _boundNormal = _.bind(func, thisArg),\
@@ -299,7 +326,6 @@
           lodashBoundMultiple = lodash.bind(lodashBoundMultiple, { "name": "fred" + index });\
         }\
       }\
-      \
       if (typeof bindAll != "undefined") {\
         var bindAllCount = -1,\
             bindAllObjects = Array(this.count);\
@@ -326,7 +352,14 @@
         uncompacted[6] = null;\
         uncompacted[18] = "";\
       }\
-      \
+      if (typeof compose != "undefined") {\
+        var compAddOne = function(n) { return n + 1; },\
+            compAddTwo = function(n) { return n + 2; },\
+            compAddThree = function(n) { return n + 3; };\
+        \
+        var _composed = _.compose(compAddThree, compAddTwo, compAddOne),\
+            lodashComposed = lodash.compose(compAddThree, compAddTwo, compAddOne);\
+      }\
       if (typeof countBy != "undefined" || typeof omit != "undefined") {\
         var wordToNumber = {\
           "one": 1,\
@@ -373,7 +406,6 @@
         \
         var words = belt.keys(wordToNumber).slice(0, limit);\
       }\
-      \
       if (typeof isEqual != "undefined") {\
         var objectOfPrimitives = {\
           "boolean": true,\
@@ -404,84 +436,16 @@
           numbers2[index] = index;\
         }\
       }\
-      \
       if (typeof multiArrays != "undefined") {\
-        var twentyValues = Array(20),\
-            twentyValues2 = Array(20),\
-            twentyFiveValues = Array(25),\
-            twentyFiveValues2 = Array(25),\
-            thirtyValues = Array(30),\
-            thirtyValues2 = Array(30),\
-            fortyValues = Array(40),\
-            fortyValues2 = Array(40),\
-            fiftyValues = Array(50),\
-            fiftyValues2 = Array(50),\
-            seventyFiveValues = Array(75),\
-            seventyFiveValues2 = Array(75),\
-            oneHundredValues = Array(100),\
-            oneHundredValues2 = Array(100),\
-            twoHundredValues = Array(200),\
-            twoHundredValues2 = Array(200),\
-            lowerChars = "abcdefghijklmnopqrstuvwxyz".split(""),\
-            upperChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");\
-        \
-        for (index = 0; index < 200; index++) {\
-          if (index < 15) {\
-            twentyValues[index] = lowerChars[index];\
-            twentyValues2[index] = upperChars[index];\
-          }\
-          if (index < 20) {\
-            twentyValues[index] =\
-            twentyValues2[index] = index;\
-            \
-            twentyFiveValues[index] = lowerChars[index];\
-            twentyFiveValues2[index] = upperChars[index];\
-          }\
-          if (index < 25) {\
-            twentyFiveValues[index] =\
-            twentyFiveValues2[index] = index;\
-            \
-            thirtyValues[index] =\
-            fortyValues[index] =\
-            fiftyValues[index] =\
-            seventyFiveValues[index] =\
-            oneHundredValues[index] =\
-            twoHundredValues[index] = lowerChars[index];\
-            \
-            thirtyValues2[index] =\
-            fortyValues2[index] =\
-            fiftyValues2[index] =\
-            seventyFiveValues2[index] =\
-            oneHundredValues2[index] =\
-            twoHundredValues2[index] = upperChars[index];\
-          }\
-          else {\
-            if (index < 30) {\
-              thirtyValues[index] =\
-              thirtyValues2[index] = index;\
-            }\
-            if (index < 40) {\
-              fortyValues[index] =\
-              fortyValues2[index] = index;\
-            }\
-            if (index < 50) {\
-              fiftyValues[index] =\
-              fiftyValues2[index] = index;\
-            }\
-            if (index < 75) {\
-              seventyFiveValues[index] =\
-              seventyFiveValues2[index] = index;\
-            }\
-            if (index < 100) {\
-              oneHundredValues[index] =\
-              oneHundredValues2[index] = index;\
-            }\
-            twoHundredValues[index] =\
-            twoHundredValues2[index] = index;\
-          }\
-        }\
+        var twentyValues = belt.shuffle(belt.range(20)),\
+            fortyValues = belt.shuffle(belt.range(40)),\
+            hundredValues = belt.shuffle(belt.range(100)),\
+            hundredValues2 = belt.shuffle(belt.range(100)),\
+            hundredTwentyValues = belt.shuffle(belt.range(120)),\
+            hundredTwentyValues2 = belt.shuffle(belt.range(120)),\
+            twoHundredValues = belt.shuffle(belt.range(200)),\
+            twoHundredValues2 = belt.shuffle(belt.range(200));\
       }\
-      \
       if (typeof partial != "undefined") {\
         var func = function(greeting, punctuation) {\
           return greeting + " fred" + (punctuation || ".");\
@@ -490,7 +454,6 @@
         var _partial = _.partial(func, "hi"),\
             lodashPartial = lodash.partial(func, "hi");\
       }\
-      \
       if (typeof template != "undefined") {\
         var tplData = {\
           "header1": "Header1",\
@@ -585,7 +548,7 @@
   );
 
   suites.push(
-    Benchmark.Suite('`_(...)` with an object')
+    Benchmark.Suite('`_(...)` with an object (slow path)')
       .add(buildName, '\
         lodash(object)'
       )
@@ -612,7 +575,7 @@
   /*--------------------------------------------------------------------------*/
 
   suites.push(
-    Benchmark.Suite('`_.bind`')
+    Benchmark.Suite('`_.bind` (slow path)')
       .add(buildName, {
         'fn': 'lodash.bind(func, { "name": "fred" })',
         'teardown': 'function bind(){}'
@@ -714,6 +677,32 @@
   /*--------------------------------------------------------------------------*/
 
   suites.push(
+    Benchmark.Suite('`_.compose`')
+      .add(buildName, {
+        'fn': 'lodash.compose(compAddThree, compAddTwo, compAddOne)',
+        'teardown': 'function compose(){}'
+      })
+      .add(otherName, {
+        'fn': '_.compose(compAddThree, compAddTwo, compAddOne)',
+        'teardown': 'function compose(){}'
+      })
+  );
+
+  suites.push(
+    Benchmark.Suite('composed call')
+      .add(buildName, {
+        'fn': 'lodashComposed(0)',
+        'teardown': 'function compose(){}'
+      })
+      .add(otherName, {
+        'fn': '_composed(0)',
+        'teardown': 'function compose(){}'
+      })
+  );
+
+  /*--------------------------------------------------------------------------*/
+
+  suites.push(
     Benchmark.Suite('`_.contains` iterating an array')
       .add(buildName, '\
         lodash.contains(numbers, limit - 1)'
@@ -732,6 +721,18 @@
         _.contains(object, limit - 1)'
       )
   );
+
+  if (lodash.contains('ab', 'ab') && _.contains('ab', 'ab')) {
+    suites.push(
+      Benchmark.Suite('`_.contains` iterating a string')
+        .add(buildName, '\
+          lodash.contains(strNumbers, "," + (limit - 1))'
+        )
+        .add(otherName, '\
+          _.contains(strNumbers, "," + (limit - 1))'
+        )
+    );
+  }
 
   /*--------------------------------------------------------------------------*/
 
@@ -794,18 +795,6 @@
   );
 
   suites.push(
-    Benchmark.Suite('`_.difference` iterating 75 elements')
-      .add(buildName, {
-        'fn': 'lodash.difference(seventyFiveValues, seventyFiveValues2)',
-        'teardown': 'function multiArrays(){}'
-      })
-      .add(otherName, {
-        'fn': '_.difference(seventyFiveValues, seventyFiveValues2)',
-        'teardown': 'function multiArrays(){}'
-      })
-  );
-
-  suites.push(
     Benchmark.Suite('`_.difference` iterating 200 elements')
       .add(buildName, {
         'fn': 'lodash.difference(twoHundredValues, twoHundredValues2)',
@@ -820,11 +809,11 @@
   suites.push(
     Benchmark.Suite('`_.difference` iterating 20 and 40 elements')
       .add(buildName, {
-        'fn': 'lodash.difference(twentyValues, fortyValues2)',
+        'fn': 'lodash.difference(twentyValues, fortyValues)',
         'teardown': 'function multiArrays(){}'
       })
       .add(otherName, {
-        'fn': '_.difference(twentyValues, fortyValues2)',
+        'fn': '_.difference(twentyValues, fortyValues)',
         'teardown': 'function multiArrays(){}'
       })
   );
@@ -885,12 +874,12 @@
     Benchmark.Suite('`_.every` iterating an array')
       .add(buildName, '\
         lodash.every(numbers, function(num) {\
-          return num + "";\
+          return num < limit;\
         })'
       )
       .add(otherName, '\
         _.every(numbers, function(num) {\
-          return num + "";\
+          return num < limit;\
         })'
       )
   );
@@ -899,12 +888,12 @@
     Benchmark.Suite('`_.every` iterating an object')
       .add(buildName, '\
         lodash.every(object, function(num) {\
-          return num + "";\
+          return num < limit;\
         })'
       )
       .add(otherName, '\
         _.every(object, function(num) {\
-          return num + "";\
+          return num < limit;\
         })'
       )
   );
@@ -1131,11 +1120,11 @@
   suites.push(
     Benchmark.Suite('`_.indexOf`')
       .add(buildName, {
-        'fn': 'lodash.indexOf(twoHundredValues, 199)',
+        'fn': 'lodash.indexOf(hundredValues, 99)',
         'teardown': 'function multiArrays(){}'
       })
       .add(otherName, {
-        'fn': '_.indexOf(twoHundredValues, 199)',
+        'fn': '_.indexOf(hundredValues, 99)',
         'teardown': 'function multiArrays(){}'
       })
   );
@@ -1153,25 +1142,13 @@
   );
 
   suites.push(
-    Benchmark.Suite('`_.intersection` iterating 75 elements')
+    Benchmark.Suite('`_.intersection` iterating 120 elements')
       .add(buildName, {
-        'fn': 'lodash.intersection(seventyFiveValues, seventyFiveValues2)',
+        'fn': 'lodash.intersection(hundredTwentyValues, hundredTwentyValues2)',
         'teardown': 'function multiArrays(){}'
       })
       .add(otherName, {
-        'fn': '_.intersection(seventyFiveValues, seventyFiveValues2)',
-        'teardown': 'function multiArrays(){}'
-      })
-  );
-
-  suites.push(
-    Benchmark.Suite('`_.intersection` iterating 200 elements')
-      .add(buildName, {
-        'fn': 'lodash.intersection(twoHundredValues, twoHundredValues2)',
-        'teardown': 'function multiArrays(){}'
-      })
-      .add(otherName, {
-        'fn': '_.intersection(twoHundredValues, twoHundredValues2)',
+        'fn': '_.intersection(hundredTwentyValues, hundredTwentyValues2)',
         'teardown': 'function multiArrays(){}'
       })
   );
@@ -1193,37 +1170,63 @@
   suites.push(
     Benchmark.Suite('`_.invoke` iterating an array')
       .add(buildName, '\
-        lodash.invoke(numbers, "toFixed", "2")'
+        lodash.invoke(numbers, "toFixed")'
       )
       .add(otherName, '\
-        _.invoke(numbers, "toFixed", "2")'
+        _.invoke(numbers, "toFixed")'
+      )
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.invoke` with arguments iterating an array')
+      .add(buildName, '\
+        lodash.invoke(numbers, "toFixed", 1)'
+      )
+      .add(otherName, '\
+        _.invoke(numbers, "toFixed", 1)'
       )
   );
 
   suites.push(
     Benchmark.Suite('`_.invoke` with a function for `methodName` iterating an array')
       .add(buildName, '\
-        lodash.invoke(numbers, String.prototype.split, "")'
+        lodash.invoke(numbers, Number.prototype.toFixed, 1)'
       )
       .add(otherName, '\
-        _.invoke(numbers, String.prototype.split, "")'
+        _.invoke(numbers, Number.prototype.toFixed, 1)'
       )
   );
 
   suites.push(
     Benchmark.Suite('`_.invoke` iterating an object')
       .add(buildName, '\
-        lodash.invoke(object, "toFixed", "2")'
+        lodash.invoke(object, "toFixed", 1)'
       )
       .add(otherName, '\
-        _.invoke(object, "toFixed", "2")'
+        _.invoke(object, "toFixed", 1)'
       )
   );
 
   /*--------------------------------------------------------------------------*/
 
   suites.push(
-    Benchmark.Suite('`_.isEqual` comparing primitives and objects (edge case)')
+    Benchmark.Suite('`_.isEqual` comparing primitives')
+      .add(buildName, {
+        'fn': '\
+          lodash.isEqual(1, "1");\
+          lodash.isEqual(1, 1)',
+        'teardown': 'function isEqual(){}'
+      })
+      .add(otherName, {
+        'fn': '\
+          _.isEqual(1, "1");\
+          _.isEqual(1, 1);',
+        'teardown': 'function isEqual(){}'
+      })
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.isEqual` comparing primitives and their object counterparts (edge case)')
       .add(buildName, {
         'fn': 'lodash.isEqual(objectOfPrimitives, objectOfObjects)',
         'teardown': 'function isEqual(){}'
@@ -1463,7 +1466,7 @@
   /*--------------------------------------------------------------------------*/
 
   suites.push(
-    Benchmark.Suite('`_.partial`')
+    Benchmark.Suite('`_.partial` (slow path)')
       .add(buildName, {
         'fn': 'lodash.partial(func, "hi")',
         'teardown': 'function partial(){}'
@@ -1484,6 +1487,50 @@
         'fn': '_partial("!")',
         'teardown': 'function partial(){}'
       })
+  );
+
+  /*--------------------------------------------------------------------------*/
+
+  suites.push(
+    Benchmark.Suite('`_.partition` iterating an array')
+      .add(buildName, '\
+        lodash.partition(numbers, function(num) {\
+          return num % 2;\
+        })'
+      )
+      .add(otherName, '\
+        _.partition(numbers, function(num) {\
+          return num % 2;\
+        })'
+      )
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.partition` iterating an array with `thisArg` (slow path)')
+      .add(buildName, '\
+        lodash.partition(numbers, function(num, index) {\
+          return this["key" + index] % 2;\
+        }, object)'
+      )
+      .add(otherName, '\
+        _.partition(numbers, function(num, index) {\
+           return this["key" + index] % 2;\
+        }, object)'
+      )
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.partition` iterating an object')
+      .add(buildName, '\
+        lodash.partition(object, function(num) {\
+          return num % 2;\
+        })'
+      )
+      .add(otherName, '\
+        _.partition(object, function(num) {\
+          return num % 2;\
+        })'
+      )
   );
 
   /*--------------------------------------------------------------------------*/
@@ -1612,12 +1659,12 @@
     Benchmark.Suite('`_.reject` iterating an object')
       .add(buildName, '\
         lodash.reject(object, function(num) {\
-          return num % 2\
+          return num % 2;\
         })'
       )
       .add(otherName, '\
         _.reject(object, function(num) {\
-          return num % 2\
+          return num % 2;\
         })'
       )
   );
@@ -1809,7 +1856,7 @@
   );
 
   suites.push(
-    Benchmark.Suite('`_.times` with `thisArg`')
+    Benchmark.Suite('`_.times` with `thisArg` (slow path)')
       .add(buildName, '\
         var result = [];\
         lodash.times(limit, function(n) { result.push(this.sin(n)); }, Math)'
@@ -1845,6 +1892,28 @@
   /*--------------------------------------------------------------------------*/
 
   suites.push(
+    Benchmark.Suite('`_.unescape` string without html entities')
+      .add(buildName, '\
+        lodash.unescape("`&`, `<`, `>`, `\\"`, and `\'`")'
+      )
+      .add(otherName, '\
+        _.unescape("`&`, `<`, `>`, `\\"`, and `\'`")'
+      )
+  );
+
+  suites.push(
+    Benchmark.Suite('`_.unescape` string with html entities')
+      .add(buildName, '\
+        lodash.unescape("`&amp;`, `&lt;`, `&gt;`, `&quot;`, and `&#39;`")'
+      )
+      .add(otherName, '\
+        _.unescape("`&amp;`, `&lt;`, `&gt;`, `&quot;`, and `&#39;`")'
+      )
+  );
+
+  /*--------------------------------------------------------------------------*/
+
+  suites.push(
     Benchmark.Suite('`_.union`')
       .add(buildName, '\
         lodash.union(numbers, twoNumbers, fourNumbers)'
@@ -1855,25 +1924,13 @@
   );
 
   suites.push(
-    Benchmark.Suite('`_.union` iterating an array of 75 elements')
-      .add(buildName, {
-        'fn': 'lodash.union(twentyFiveValues, fiftyValues2)',
-        'teardown': 'function multiArrays(){}'
-      })
-      .add(otherName, {
-        'fn': '_.union(twentyFiveValues, fiftyValues2)',
-        'teardown': 'function multiArrays(){}'
-      })
-  );
-
-  suites.push(
     Benchmark.Suite('`_.union` iterating an array of 200 elements')
       .add(buildName, {
-        'fn': 'lodash.union(oneHundredValues, oneHundredValues2)',
+        'fn': 'lodash.union(hundredValues, hundredValues2)',
         'teardown': 'function multiArrays(){}'
       })
       .add(otherName, {
-        'fn': '_.union(oneHundredValues, oneHundredValues2)',
+        'fn': '_.union(hundredValues, hundredValues2)',
         'teardown': 'function multiArrays(){}'
       })
   );
@@ -1905,25 +1962,13 @@
   );
 
   suites.push(
-    Benchmark.Suite('`_.uniq` iterating an array of 75 elements')
-      .add(buildName, {
-        'fn': 'lodash.uniq(twentyFiveValues.concat(fiftyValues2))',
-        'teardown': 'function multiArrays(){}'
-      })
-      .add(otherName, {
-        'fn': '_.uniq(twentyFiveValues.concat(fiftyValues2))',
-        'teardown': 'function multiArrays(){}'
-      })
-  );
-
-  suites.push(
     Benchmark.Suite('`_.uniq` iterating an array of 200 elements')
       .add(buildName, {
-        'fn': 'lodash.uniq(oneHundredValues.concat(oneHundredValues2))',
+        'fn': 'lodash.uniq(twoHundredValues)',
         'teardown': 'function multiArrays(){}'
       })
       .add(otherName, {
-        'fn': '_.uniq(oneHundredValues.concat(oneHundredValues2))',
+        'fn': '_.uniq(twoHundredValues)',
         'teardown': 'function multiArrays(){}'
       })
   );
@@ -2000,9 +2045,9 @@
     log(Benchmark.platform);
   }
   // in the browser, expose `run` to be called later
-  if (root.document && !root.phantom) {
+  if (document) {
     root.run = run;
   } else {
     run();
   }
-}(typeof global == 'object' && global || this));
+}.call(this));
