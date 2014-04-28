@@ -12,6 +12,7 @@
 	</head>
 	<body>
 		<script src="../vendor/qunit/qunit/qunit.js"></script>
+		<script src="../vendor/qunit-extras/qunit-extras.js"></script>
 		<script src="../vendor/platform.js/platform.js"></script>
 		<script src="./asset/test-ui.js"></script>
 		<div id="qunit"></div>
@@ -19,7 +20,10 @@
 		<script>
 			// set bad shims
 			Array._isArray = Array.isArray;
-			Array.isArray = function() { return false; };
+			Array.isArray = function() {};
+
+			Date._now = Date.now;
+			Date.now = function() {};
 
 			Function.prototype._bind = Function.prototype.bind;
 			Function.prototype.bind = function() { return function() {}; };
@@ -30,10 +34,13 @@
 			Object._defineProperty = Object.defineProperty;
 			Object.defineProperty = function() {};
 
-			Object._keys = Object.keys;
-			Object.keys = function() { return []; };
+			Object._getPrototypeOf = Object.getPrototypeOf;
+			Object.getPrototypeOf = function() {};
 
-			// load Lo-Dash and expose it to the bad `Object.keys` shim
+			Object._keys = Object.keys;
+			Object.keys = function() {};
+
+			// load Lo-Dash and expose it to the bad shims
 			document.write('<script src="' + (ui.isModularize ? '../lodash.js' : ui.buildPath) + '"><\/script>');
 		</script>
 		<script>
@@ -45,6 +52,11 @@
 				Array.isArray = Array._isArray;
 			} else {
 				delete Array.isArray;
+			}
+			if (Date._now) {
+				Date.now = Date._now;
+			} else {
+				delete Date.now;
 			}
 			if (Function.prototype._bind) {
 				Function.prototype.bind = Function.prototype._bind;
@@ -61,23 +73,38 @@
 			} else {
 				delete Object.defineProperty;
 			}
+			if (Object._getPrototypeOf) {
+				Object.getPrototypeOf = Object._getPrototypeOf;
+			} else {
+				delete Object.getPrototypeOf;
+			}
 			if (Object._keys) {
 				Object.keys = Object._keys;
 			} else {
 				delete Object.keys;
 			}
 			delete Array._isArray;
+			delete Date._now;
 			delete Function.prototype._bind;
 			delete Object._create;
 			delete Object._defineProperty;
+			delete Object._getPrototypeOf;
 			delete Object._keys;
 
-			// load Lo-Dash again to overwrite the existing `_` value
-			document.write('<script src="' + (ui.isModularize ? '../lodash.js' : ui.buildPath) + '"><\/script>');
+			QUnit.config.hidepassed = true;
 
-			// load test.js if not using require.js
+			// assign results to `global_test_results` for Sauce Labs
+			var global_test_results;
+			QUnit.done(function(results) {
+				global_test_results = results;
+			});
+
+			// clear existing `_` value
+			window._ = undefined;
+
+			// load Lo-Dash and test scripts
 			document.write(ui.urlParams.loader == 'none'
-				? '<script src="test.js"><\/script>'
+				? '<script src="' + ui.buildPath + '"><\/script><script src="test.js"><\/script>'
 				: '<script data-dojo-config="async:1" src="' + ui.loaderPath + '"><\/script>'
 			);
 		</script>
@@ -147,8 +174,8 @@
 						underscoreModule = underscore.noConflict();
 						underscoreModule.moduleName = 'underscore';
 					}
-					if (lodash && lodash.noConflict) {
-						lodashModule = lodash.noConflict();
+					if (lodash) {
+						lodashModule = lodash;
 						lodashModule.moduleName = 'lodash';
 					}
 					if (ui.isModularize) {
