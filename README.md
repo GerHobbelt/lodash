@@ -49,7 +49,7 @@ A list of upcoming features is available on our [roadmap](https://github.com/lod
  * [_.negate](http://lodash.com/docs#negate) to create negated predicate functions
  * [_.noop](http://lodash.com/docs#noop) for function placeholders
  * [_.parseInt](http://lodash.com/docs#parseInt) for consistent behavior
- * [_.pull](http://lodash.com/docs#pull) & [_.remove](http://lodash.com/docs#remove) for mutating arrays
+ * [_.pull](http://lodash.com/docs#pull), [_.pullAt](http://lodash.com/docs#pullAt), & [_.remove](http://lodash.com/docs#remove) for mutating arrays
  * [_.random](http://lodash.com/docs#random) supports returning floating-point numbers
  * [_.runInContext](http://lodash.com/docs#runInContext) for easier mocking
  * [_.slice](http://lodash.com/docs#slice) for creating subsets of array-like values
@@ -60,6 +60,8 @@ A list of upcoming features is available on our [roadmap](https://github.com/lod
  * [_.where](http://lodash.com/docs#where) supports deep object comparisons
  * [_.xor](http://lodash.com/docs#xor) to complement [_.difference](http://lodash.com/docs#difference), [_.intersection](http://lodash.com/docs#intersection), & [_.union](http://lodash.com/docs#union)
  * [_.zip](http://lodash.com/docs#zip) is capable of unzipping values
+ * [_.bind](http://lodash.com/docs#bind), [_.curry](http://lodash.com/docs#curry), [_.partial](http://lodash.com/docs#partial), &
+   [more](http://lodash.com/docs  "_.bindKey, _.partialRight") support argument placeholders
  * [_.capitalize](http://lodash.com/docs#capitalize), [_.trim](http://lodash.com/docs#trim), &
    [more](http://lodash.com/docs "_.camelCase, _.endsWith, _.escapeRegExp, _.kebabCase, _.pad, _.padLeft, _.padRight, _.repeat, _.snakeCase, _.startsWith, _.trimLeft, _.trimRight, _.truncate") string methods
  * [_.contains](http://lodash.com/docs#contains), [_.toArray](http://lodash.com/docs#toArray), &
@@ -94,7 +96,7 @@ A list of upcoming features is available on our [roadmap](https://github.com/lod
 
 ## Support
 
-Tested in Chrome 19,33-34, Firefox 3,20,27-28, IE 6-11, Opera 10,12,19-20, Safari 5-7, Node.js 0.6.21~0.10.26, Narwhal 0.3.2, PhantomJS 1.9.2, RingoJS 0.9, & Rhino 1.7RC5.
+Tested in Chrome (19, 33-34), Firefox (3, 20, 28-29), IE 6-11, Opera (10, 12, 19-20), Safari 5-7, Node.js 0.6.21~0.10.28, Narwhal 0.3.2, PhantomJS 1.9.2, RingoJS 0.9, & Rhino 1.7RC5.
 
 Automated browser test results [are available](https://saucelabs.com/u/lodash) as well as [Travis CI](https://travis-ci.org/) builds for [lodash](https://travis-ci.org/lodash/lodash/), [lodash-cli](https://travis-ci.org/lodash/lodash-cli/), [lodash-amd](https://travis-ci.org/lodash/lodash-amd/), [lodash-node](https://travis-ci.org/lodash/lodash-node/), & [grunt-lodash](https://travis-ci.org/lodash/grunt-lodash).
 

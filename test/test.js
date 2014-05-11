@@ -185,9 +185,6 @@
     return result;
   }());
 
-  /** Detects if running the pre-build version of Lo-Dash */
-  var isPreBuild = /getHolders/.test(_.partial(_.noop));
-
   /** Used to check problem JScript properties (a.k.a. the `[[DontEnum]]` bug) */
   var shadowedProps = [
     'constructor',
@@ -673,8 +670,8 @@
     var args = arguments;
 
     test('should return `undefined` for nonexistent keys', 1, function() {
-      var actual = _.at(['a', 'b',  'c'], [0, 2, 4]);
-      deepEqual(actual, ['a', 'c', undefined]);
+      var actual = _.at(['a', 'b',  'c'], [2, 4, 0]);
+      deepEqual(actual, ['c', undefined, 'a']);
     });
 
     test('should return an empty array when no keys are provided', 1, function() {
@@ -682,25 +679,18 @@
     });
 
     test('should accept multiple key arguments', 1, function() {
-      var actual = _.at(['a', 'b', 'c', 'd'], 0, 2, 3);
-      deepEqual(actual, ['a', 'c', 'd']);
+      var actual = _.at(['a', 'b', 'c', 'd'], 3, 0, 2);
+      deepEqual(actual, ['d', 'a', 'c']);
     });
 
     test('should work with an `arguments` object for `collection`', 1, function() {
-      var actual = _.at(args, [0, 2]);
-      deepEqual(actual, ['a', 'c']);
+      var actual = _.at(args, [2, 0]);
+      deepEqual(actual, ['c', 'a']);
     });
 
     test('should work with an object for `collection`', 1, function() {
-      var actual = _.at({ 'a': 1, 'b': 2, 'c': 3 }, ['a', 'c']);
-      deepEqual(actual, [1, 3]);
-    });
-
-    test('should work when used as a callback for `_.map`', 1, function() {
-      var array = [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
-          actual = _.map(array, _.at);
-
-      deepEqual(actual, [[1], [5], [9]]);
+      var actual = _.at({ 'a': 1, 'b': 2, 'c': 3 }, ['c', 'a']);
+      deepEqual(actual, [3, 1]);
     });
 
     _.each({
@@ -709,7 +699,7 @@
     },
     function(collection, key) {
       test('should work with a string ' + key + ' for `collection`', 1, function() {
-        deepEqual(_.at(collection, [0, 2]), ['a', 'c']);
+        deepEqual(_.at(collection, [2, 0]), ['c', 'a']);
       });
     });
   }('a', 'b', 'c'));
@@ -779,7 +769,7 @@
     });
 
     test('should support placeholders', 4, function() {
-      if (isPreBuild) {
+      if (!isModularize) {
         var object = {},
             bound = _.bind(fn, object, _, 'b', _);
 
@@ -981,7 +971,7 @@
         }
       };
 
-      if (isPreBuild) {
+      if (!isModularize) {
         var bound = _.bindKey(object, 'fn', _, 'b', _);
         deepEqual(bound('a', 'c'), ['a', 'b', 'c']);
         deepEqual(bound('a'), ['a', 'b', undefined]);
@@ -1060,12 +1050,6 @@
       strictEqual(func(Object(string)), expected);
       strictEqual(func({ 'toString': _.constant(string) }), expected);
     });
-
-    test('`_.' + methodName + '` should return an empty string when provided `null`, `undefined`, or empty strings', 3, function() {
-      strictEqual(func(null), '');
-      strictEqual(func(undefined), '');
-      strictEqual(func(''), '');
-    });
   });
 
   /*--------------------------------------------------------------------------*/
@@ -1095,12 +1079,6 @@
       strictEqual(_.capitalize('fred'), 'Fred');
       strictEqual(_.capitalize('Fred'), 'Fred');
       strictEqual(_.capitalize(' fred'), ' fred');
-    });
-
-    test('should return an empty string when provided `null`, `undefined`, or empty strings', 3, function() {
-      strictEqual(_.capitalize(null), '');
-      strictEqual(_.capitalize(undefined), '');
-      strictEqual(_.capitalize(''), '');
     });
   }());
 
@@ -1670,11 +1648,23 @@
       deepEqual(actual, values);
     });
 
-    test('should return `_.identity` when `func` is `null` or `undefined`', 2, function() {
+    test('should return `_.identity` when `func` is nullish', 2, function() {
       var object = {};
       _.each([null, undefined], function(value) {
         var callback = _.callback(value);
         strictEqual(callback(object), object);
+      });
+    });
+
+    test('should not error when `func` is nullish and a `thisArg` is provided', 2, function() {
+      var object = {};
+      _.each([null, undefined], function(value) {
+        try {
+          var callback = _.callback(value, {});
+          strictEqual(callback(object), object);
+        } catch(e) {
+          ok(false);
+        }
       });
     });
 
@@ -1828,7 +1818,7 @@
     });
 
     test('should support placeholders', 4, function() {
-      if (isPreBuild) {
+      if (!isModularize) {
         var curried = _.curry(fn);
         deepEqual(curried(1)(_, 3)(_, 4)(2), [1, 2, 3, 4]);
         deepEqual(curried(_, 2)(1)(_, 4)(3), [1, 2, 3, 4]);
@@ -2405,10 +2395,25 @@
       strictEqual(_.escape('abc'), 'abc');
     });
 
-    test('should return an empty string when provided `null`, `undefined`, or empty strings', 3, function() {
-      strictEqual(_.escape(null), '');
-      strictEqual(_.escape(undefined), '');
-      strictEqual(_.escape(''), '');
+    test('should escape the same characters unescaped by `_.unescape`', 1, function() {
+      strictEqual(_.escape(_.unescape(escaped)), escaped);
+    });
+  }());
+
+  /*--------------------------------------------------------------------------*/
+
+  QUnit.module('lodash.escapeRegExp');
+
+  (function() {
+    test('should escape values', 1, function() {
+      var escaped = '\\.\\*\\+\\?\\^\\$\\{\\}\\(\\)\\|\\[\\]\\/\\\\',
+          unescaped = '.*+?^${}()|[\]\/\\';
+
+      strictEqual(_.escapeRegExp(unescaped), escaped);
+    });
+
+    test('should handle strings with nothing to escape', 1, function() {
+      strictEqual(_.escapeRegExp('abc'), 'abc');
     });
   }());
 
@@ -2721,7 +2726,7 @@
       deepEqual(_.first(array, 2), [1, 2]);
     });
 
-    test('should treat falsey `n` values, except `null` or `undefined`, as `0`', 1, function() {
+    test('should treat falsey `n` values, except nullish, as `0`', 1, function() {
       var expected = _.map(falsey, function(value) {
         return value == null ? 1 : [];
       });
@@ -3327,7 +3332,7 @@
       deepEqual(_.reduce(array, func, { 'a': 1}), { 'a': 1, 'b': 2, 'c': 3 });
     });
 
-    test('`_.' + methodName + '` should not error on `null` or `undefined` sources (test in IE < 9)', 1, function() {
+    test('`_.' + methodName + '` should not error on nullish sources (test in IE < 9)', 1, function() {
       try {
         deepEqual(func({ 'a': 1 }, undefined, { 'b': 2 }, null), { 'a': 1, 'b': 2 });
       } catch(e) {
@@ -3335,7 +3340,7 @@
       }
     });
 
-    test('`_.' + methodName + '` should not error when `object` is `null` or `undefined` and source objects are provided', 1, function() {
+    test('`_.' + methodName + '` should not error when `object` is nullish and source objects are provided', 1, function() {
       var expected = _.times(2, _.constant(true));
 
       var actual = _.map([null, undefined], function(value) {
@@ -3437,15 +3442,6 @@
       deepEqual(_.intersection(largeArray, largeArray), expected);
       deepEqual(_.uniq(largeArray), expected);
       deepEqual(_.without.apply(_, [largeArray].concat(largeArray)), []);
-    });
-
-    test('lodash.memoize should support values that resolve to the `__proto__` key', 1, function() {
-      var count = 0,
-          memoized = _.memoize(function() { return ++count; });
-
-      memoized('__proto__');
-      memoized('__proto__');
-      strictEqual(count, 1);
     });
   }());
 
@@ -3808,7 +3804,7 @@
       deepEqual(_.initial([]), []);
     });
 
-    test('should treat falsey `n` values, except `null` or `undefined`,  as `0`', 1, function() {
+    test('should treat falsey `n` values, except nullish, as `0`', 1, function() {
       var expected = _.map(falsey, function(value) {
         return value == null ? [1, 2] : array;
       });
@@ -3983,7 +3979,7 @@
       deepEqual(_.invoke(1), []);
     });
 
-    test('should work with `null` or `undefined` elements', 1, function() {
+    test('should work with nullish elements', 1, function() {
       var array = ['a', null, undefined, 'd'];
       deepEqual(_.invoke(array, 'toUpperCase'), ['A', undefined, undefined, 'D']);
     });
@@ -5597,7 +5593,7 @@
       deepEqual(_.last(array, 2), [2, 3]);
     });
 
-    test('should treat falsey `n` values, except `null` or `undefined`, as `0`', 1, function() {
+    test('should treat falsey `n` values, except nullish, as `0`', 1, function() {
       var expected = _.map(falsey, function(value) {
         return value == null ? 3 : [];
       });
@@ -6093,14 +6089,33 @@
     });
 
     test('should expose a `cache` object on the `memoized` function', 4, function() {
-      _.each(['_a', 'a'], function(key, index) {
-        var memoized = _.memoize(_.identity, index && _.identity);
+      _.times(2, function(index) {
+        var resolver = index && _.identity,
+            memoized = _.memoize(_.identity, resolver);
 
         memoized('a');
-        strictEqual(memoized.cache[key], 'a');
+        strictEqual(memoized.cache.a, 'a');
 
-        memoized.cache[key] = 'b';
+        memoized.cache.a = 'b';
         strictEqual(memoized('a'), 'b');
+      });
+    });
+
+    test('should skip the `__proto__` key', 4, function() {
+      _.times(2, function(index) {
+        var count = 0,
+            resolver = index && _.identity;
+
+        var memoized = _.memoize(function() {
+          count++;
+          return [];
+        }, resolver);
+
+        memoized('__proto__');
+        memoized('__proto__');
+
+        strictEqual(count, 2);
+        ok(!(memoized.cache instanceof Array));
       });
     });
   }());
@@ -6366,15 +6381,36 @@
     }
 
     var value = ['a'],
-        source = { 'a': function(array) { return array[0]; } };
+        source = { 'a': function(array) { return array[0]; }, 'b': 'B' };
 
-    test('should accept an `object` argument', 1, function() {
-      var lodash = {};
-      _.mixin(lodash, source);
-      strictEqual(lodash.a(value), 'a');
+    test('should use `this` as the default `object` value', 3, function() {
+      var object = _.create(_);
+      object.mixin(source);
+
+      strictEqual(object.a(value), 'a');
+
+      ok(!('a' in _));
+      ok(!('a' in _.prototype));
+
+      delete wrapper.a;
+      delete wrapper.prototype.a;
+      delete wrapper.b;
+      delete wrapper.prototype.b;
     });
 
-    test('should accept a function `object` argument', 2, function() {
+    test('should accept an `object` argument', 1, function() {
+      var object = {};
+      _.mixin(object, source);
+      strictEqual(object.a(value), 'a');
+    });
+
+    test('should return `object`', 2, function() {
+      var object = {};
+      strictEqual(_.mixin(object, source), object);
+      strictEqual(_.mixin(), _);
+    });
+
+    test('should work with a function for `object`', 2, function() {
       _.mixin(wrapper, source);
 
       var wrapped = wrapper(value),
@@ -6385,30 +6421,24 @@
 
       delete wrapper.a;
       delete wrapper.prototype.a;
+      delete wrapper.b;
+      delete wrapper.prototype.b;
     });
 
     test('should mixin `source` methods into lodash', 4, function() {
-      if (!isNpm) {
-        _.mixin({
-          'a': 'a',
-          'A': function(string) { return string.toUpperCase(); }
-        });
+      _.mixin(source);
 
-        ok(!('a' in _));
-        ok(!('a' in _.prototype));
+      strictEqual(_.a(value), 'a');
+      strictEqual(_(value).a().__wrapped__, 'a');
 
-        delete _.a;
-        delete _.prototype.a;
+      delete _.a;
+      delete _.prototype.a;
 
-        strictEqual(_.A('a'), 'A');
-        strictEqual(_('a').A().value(), 'A');
+      ok(!('b' in _));
+      ok(!('b' in _.prototype));
 
-        delete _.A;
-        delete _.prototype.A;
-      }
-      else {
-        skipTest(4);
-      }
+      delete _.b;
+      delete _.prototype.b;
     });
 
     test('should accept an `options` argument', 16, function() {
@@ -6426,7 +6456,7 @@
           var wrapped = func(value),
               actual = wrapped.a();
 
-          if (options && (options === true || options.chain)) {
+          if (options === true || (options && options.chain)) {
             strictEqual(actual.__wrapped__, 'a', message(func, true));
             ok(actual instanceof func, message(func, true));
           } else {
@@ -6435,6 +6465,8 @@
           }
           delete func.a;
           delete func.prototype.a;
+          delete func.b;
+          delete func.prototype.b;
         });
       });
     });
@@ -6458,8 +6490,35 @@
       }
       delete _.a;
       delete _.prototype.a;
+      delete _.b;
+      delete _.prototype.b;
 
       ok(pass);
+    });
+
+    test('should return the existing wrapper when chaining', 2, function() {
+      if (!isNpm) {
+        _.each([_, wrapper], function(func) {
+          if (func === _) {
+            var wrapper = _(source),
+                actual = wrapper.mixin();
+
+            strictEqual(actual.value(), _);
+          }
+          else {
+            wrapper = _(func);
+            actual = wrapper.mixin(source);
+            strictEqual(actual, wrapper);
+          }
+          delete func.a;
+          delete func.prototype.a;
+          delete func.b;
+          delete func.prototype.b;
+        });
+      }
+      else {
+        skipTest(2);
+      }
     });
   }());
 
@@ -6714,13 +6773,17 @@
       });
     });
 
-    test('`_.' + methodName + '` should return an empty string when provided `null`, `undefined`, or empty strings', 3, function() {
-      strictEqual(func(null), '');
-      strictEqual(func(undefined, 3), '   ');
-      strictEqual(func('', 1), ' ');
+    test('`_.' + methodName + '` should return an empty string when provided `null`, `undefined`, or empty string and `chars`', 6, function() {
+      _.each([null, '_-'], function(chars) {
+        strictEqual(func(null, 0, chars), '');
+        strictEqual(func(undefined, 0, chars), '');
+        strictEqual(func('', 0, chars), '');
+      });
     });
 
-    test('`_.' + methodName + '` should work with an empty string for `chars`', 1, function() {
+    test('`_.' + methodName + '` should work with `null`, `undefined`, or empty string for `chars`', 3, function() {
+      notStrictEqual(func('abc', 6, null), 'abc');
+      notStrictEqual(func('abc', 6, undefined), 'abc');
       strictEqual(func('abc', 6, ''), 'abc');
     });
   });
@@ -6831,7 +6894,7 @@
     });
 
     test('`_.' + methodName + '` should support placeholders', 4, function() {
-      if (isPreBuild) {
+      if (!isModularize) {
         var fn = function() { return slice.call(arguments); },
             par = func(fn, _, 'b', _);
 
@@ -7135,7 +7198,7 @@
       deepEqual(_.pluck(object, 'length'), [1, 2, 3]);
     });
 
-    test('should work with `null` or `undefined` elements', 1, function() {
+    test('should work with nullish elements', 1, function() {
       var objects = [{ 'a': 1 }, null, undefined, { 'a': 4 }];
       deepEqual(_.pluck(objects, 'a'), [1, undefined, undefined, 4]);
     });
@@ -7208,6 +7271,75 @@
 
       _.pull(array, undefined);
       deepEqual(array, [1, 3]);
+    });
+  }());
+
+  /*--------------------------------------------------------------------------*/
+
+  QUnit.module('lodash.pullAt');
+
+  (function() {
+    test('should modify the array and return removed elements', 2, function() {
+      var array = [1, 2, 3],
+          actual = _.pullAt(array, [0, 1]);
+
+      deepEqual(array, [3]);
+      deepEqual(actual, [1, 2]);
+    });
+
+    test('should work with unsorted indexes', 2, function() {
+      var array = [1, 2, 3, 4],
+          actual = _.pullAt(array, [1, 3, 0]);
+
+      deepEqual(array, [3]);
+      deepEqual(actual, [2, 4, 1]);
+    });
+
+    test('should work with repeated indexes', 2, function() {
+      var array = [1, 2, 3, 4],
+          actual = _.pullAt(array, [0, 2, 0, 1, 0, 2]);
+
+      deepEqual(array, [4]);
+      deepEqual(actual, [1, 3, 1, 2, 1, 3]);
+    });
+
+    test('should return `undefined` for nonexistent keys', 2, function() {
+      var array = ['a', 'b',  'c'],
+          actual = _.pullAt(array, [2, 4, 0]);
+
+      deepEqual(array, ['b']);
+      deepEqual(actual, ['c', undefined, 'a']);
+    });
+
+    test('should return an empty array when no keys are provided', 2, function() {
+      var array = ['a', 'b', 'c'],
+          actual = _.pullAt(array);
+
+      deepEqual(array, ['a', 'b', 'c']);
+      deepEqual(actual, []);
+    });
+
+    test('should accept multiple index arguments', 2, function() {
+      var array = ['a', 'b', 'c', 'd'],
+          actual = _.pullAt(array, 3, 0, 2);
+
+      deepEqual(array, ['b']);
+      deepEqual(actual, ['d', 'a', 'c']);
+    });
+
+    test('should ignore non-index values', 2, function() {
+      var array = ['a', 'b', 'c'],
+          clone = array.slice();
+
+      var values = _.reject(empties, function(value) {
+        return value === 0 || _.isArray(value);
+      }).concat(-1, 1.1);
+
+      var expected = _.map(values, _.constant(undefined)),
+          actual = _.pullAt.apply(_, [array].concat(values));
+
+      deepEqual(actual, expected);
+      deepEqual(array, clone);
     });
   }());
 
@@ -7668,12 +7800,6 @@
       strictEqual(_.repeat(Object('abc'), 2), 'abcabc');
       strictEqual(_.repeat({ 'toString': _.constant('*') }, 3), '***');
     });
-
-    test('should return an empty string when provided `null`, `undefined`, or empty strings', 3, function() {
-      strictEqual(_.repeat(null, 1), '');
-      strictEqual(_.repeat(undefined, 2), '');
-      strictEqual(_.repeat('', 3), '');
-    });
   }());
 
   /*--------------------------------------------------------------------------*/
@@ -7694,7 +7820,7 @@
       strictEqual(_.result(object, 'd'), undefined);
     });
 
-    test('should return `undefined` when `object` is `null` or `undefined`', 2, function() {
+    test('should return `undefined` when `object` is nullish', 2, function() {
       strictEqual(_.result(null, 'a'), undefined);
       strictEqual(_.result(undefined, 'a'), undefined);
     });
@@ -7750,7 +7876,7 @@
       deepEqual(_.rest(array, 2), [3]);
     });
 
-    test('should treat falsey `n` values, except `null` or `undefined`,  as `0`', 1, function() {
+    test('should treat falsey `n` values, except nullish, as `0`', 1, function() {
       var expected = _.map(falsey, function(value) {
         return value == null ? [2, 3] : array;
       });
@@ -7803,7 +7929,7 @@
       deepEqual(args, [1, 0, array]);
     });
 
-    test('supports the `thisArg` argument', 1, function() {
+    test('should support the `thisArg` argument', 1, function() {
       var actual = _.rest(array, function(num, index) {
         return this[index] < 3;
       }, array);
@@ -7870,7 +7996,7 @@
       deepEqual(actual.sort(), array);
     });
 
-    test('should treat falsey `n` values, except `null` or `undefined`,  as `0`', 1, function() {
+    test('should treat falsey `n` values, except nullish, as `0`', 1, function() {
       var expected = _.map(falsey, function(value) {
         return value == null ? 1 : [];
       });
@@ -8462,12 +8588,6 @@
       strictEqual(func(string, 'b', Object(position)), true);
       strictEqual(func(string, 'b', { 'toString': _.constant(String(position)) }), true);
     });
-
-    test('`_.' + methodName + '` should return an empty string when provided `null`, `undefined`, or empty strings', 3, function() {
-      strictEqual(func(null), false);
-      strictEqual(func(undefined), false);
-      strictEqual(func(''), false);
-    });
   });
 
   /*--------------------------------------------------------------------------*/
@@ -8780,7 +8900,7 @@
       strictEqual(compiled(), '<<\n a \n>>');
     });
 
-    test('should resolve `null` and `undefined` values to empty strings', 4, function() {
+    test('should resolve `null` and `undefined` values to an empty string', 4, function() {
       var compiled = _.template('<%= a %><%- a %>');
       strictEqual(compiled({ 'a': null }), '');
       strictEqual(compiled({ 'a': undefined }), '');
@@ -8908,12 +9028,6 @@
     test('should coerce `string` to a string', 2, function() {
       strictEqual(_.truncate(Object(string), 4), 'h...');
       strictEqual(_.truncate({ 'toString': _.constant(string) }, 5), 'hi...');
-    });
-
-    test('should return an empty string when provided `null`, `undefined`, or empty strings', 3, function() {
-      strictEqual(_.truncate(null), '');
-      strictEqual(_.truncate(undefined, 3), '');
-      strictEqual(_.truncate('', 1), '');
     });
   }());
 
@@ -9415,6 +9529,10 @@
       ok(_.transform(new Foo) instanceof Foo);
     });
 
+    test('should check that `object` is an object before using it as the `accumulator` `[[Prototype]]', 1, function() {
+      ok(!(_.transform(1) instanceof Number));
+    });
+
     _.each({
       'array': [1, 2, 3],
       'object': { 'a': 1, 'b': 2, 'c': 3 }
@@ -9493,12 +9611,21 @@
       strictEqual(func(string, object), (index == 2 ? '-_-' : '') + 'a-b-c' + (index == 1 ? '-_-' : ''));
     });
 
-    test('`_.' + methodName + '` should return an empty string when provided `null`, `undefined`, or empty strings', 6, function() {
+    test('`_.' + methodName + '` should return an empty string when provided `null`, `undefined`, or empty string and `chars`', 6, function() {
       _.each([null, '_-'], function(chars) {
         strictEqual(func(null, chars), '');
         strictEqual(func(undefined, chars), '');
         strictEqual(func('', chars), '');
       });
+    });
+
+    test('`_.' + methodName + '` should work with `null`, `undefined`, or empty string for `chars`', 3, function() {
+      var string = whitespace + 'a b c' + whitespace,
+          expected = (index == 2 ? whitespace : '') + 'a b c' + (index == 1 ? whitespace : '');
+
+      strictEqual(func(string, null), expected);
+      strictEqual(func(string, undefined), expected);
+      strictEqual(func(string, ''), string);
     });
   });
 
@@ -9528,12 +9655,6 @@
 
     test('should unescape the same characters escaped by `_.escape`', 1, function() {
       strictEqual(_.unescape(_.escape(unescaped)), unescaped);
-    });
-
-    test('should return an empty string when provided `null`, `undefined`, or empty strings', 3, function() {
-      strictEqual(_.unescape(null), '');
-      strictEqual(_.unescape(undefined), '');
-      strictEqual(_.unescape(''), '');
     });
   }());
 
@@ -9732,14 +9853,18 @@
       deepEqual(_.where(objects, { 'a': 1, 'b': 2 }), [{ 'a': 1, 'b': 2 }]);
     });
 
-    test('should not filter by inherited `source` properties', 1, function() {
+    test('should not filter by inherited `source` properties', 2, function() {
       function Foo() {}
       Foo.prototype = { 'a': 2 };
 
       var source = new Foo;
       source.b = 2;
 
-      deepEqual(_.where(objects, source), [{ 'a': 1, 'b': 2 }, { 'a': 2, 'b': 2 }]);
+      var expected = [objects[2], objects[3]],
+          actual = _.where(objects, source);
+
+      deepEqual(actual, expected);
+      ok(_.isEmpty(_.difference(actual, objects)));
     });
 
     test('should filter by problem JScript properties (test in IE < 9)', 1, function() {
@@ -9747,14 +9872,18 @@
       deepEqual(_.where(collection, shadowedObject), [shadowedObject]);
     });
 
-    test('should work with an object for `collection`', 1, function() {
+    test('should work with an object for `collection`', 2, function() {
       var collection = {
         'x': { 'a': 1 },
         'y': { 'a': 3 },
         'z': { 'a': 1, 'b': 2 }
       };
 
-      deepEqual(_.where(collection, { 'a': 1 }), [{ 'a': 1 }, { 'a': 1, 'b': 2 }]);
+      var expected = [collection.x, collection.z],
+          actual = _.where(collection, { 'a': 1 });
+
+      deepEqual(actual, expected);
+      ok(_.isEmpty(_.difference(actual, _.values(collection))));
     });
 
     test('should work with a function for `source`', 1, function() {
@@ -9775,33 +9904,51 @@
       deepEqual(actual, expected);
     });
 
-    test('should deep compare `source` values', 1, function() {
+    test('should perform a deep partial comparison of `source`', 2, function() {
       var collection = [{ 'a': { 'b': { 'c': 1, 'd': 2 }, 'e': 3 }, 'f': 4 }],
-          expected = _.cloneDeep(collection);
+          expected = collection.slice(),
+          actual = _.where(collection, { 'a': { 'b': { 'c': 1 } } });
 
-      deepEqual(_.where(collection, { 'a': { 'b': { 'c': 1 } } }), expected);
+      deepEqual(actual, expected);
+      ok(_.isEmpty(_.difference(actual, collection)));
     });
 
     test('should search of arrays for values', 2, function() {
       var collection = [{ 'a': [1, 2] }],
-          expected = _.cloneDeep(collection);
+          expected = collection.slice();
 
       deepEqual(_.where(collection, { 'a': [] }), []);
       deepEqual(_.where(collection, { 'a': [2] }), expected);
     });
 
+    test('should perform a partial comparison of *all* objects within arrays of `source`', 2, function() {
+      var collection = [
+        { 'a': [{ 'b': 1, 'c': 2, 'd': 3 }, { 'b': 4, 'c': 5, 'd': 6 }] },
+        { 'a': [{ 'b': 1, 'c': 2, 'd': 3 }, { 'b': 4, 'c': 6, 'd': 7 }] }
+      ];
+
+      var actual = _.where(collection, { 'a': [{ 'b': 1, 'c': 2 }, { 'b': 4, 'c': 5 }] });
+      deepEqual(actual, [collection[0]]);
+      ok(_.isEmpty(_.difference(actual, collection)));
+    });
+
     test('should handle a `source` with `undefined` values', 4, function() {
-      var source = { 'b': undefined };
-      deepEqual(_.where([{ 'a': 1 }, { 'a': 1, 'b': 1 }], source), []);
+      var source = { 'b': undefined },
+          actual = _.where([{ 'a': 1 }, { 'a': 1, 'b': 1 }], source);
+
+      deepEqual(actual, []);
 
       var object = { 'a': 1, 'b': undefined };
-      deepEqual(_.where([object], source), [object]);
+      actual = _.where([object], source);
+      deepEqual(actual, [object]);
 
       source = { 'a': { 'c': undefined } };
-      deepEqual(_.where([{ 'a': { 'b': 1 } }, { 'a':{ 'b':1 , 'c': 1 } }], source), []);
+      actual = _.where([{ 'a': { 'b': 1 } }, { 'a':{ 'b':1 , 'c': 1 } }], source);
+      deepEqual(actual, []);
 
       object = { 'a': { 'b': 1, 'c': undefined } };
-      deepEqual(_.where([object], source), [object]);
+      actual = _.where([object], source);
+      deepEqual(actual, [object]);
     });
   }());
 
@@ -10365,10 +10512,48 @@
 
   /*--------------------------------------------------------------------------*/
 
+  /*--------------------------------------------------------------------------*/
+
+  QUnit.module('"Strings" category methods');
+
+ (function() {
+    var stringMethods = [
+      'camelCase',
+      'capitalize',
+      'escape',
+      'escapeRegExp',
+      'kebabCase',
+      'pad',
+      'padLeft',
+      'padRight',
+      'repeat',
+      'snakeCase',
+      'trim',
+      'trimLeft',
+      'trimRight',
+      'truncate',
+      'unescape'
+    ];
+
+    _.each(stringMethods, function(methodName) {
+      var func = _[methodName];
+
+      test('`_.' + methodName + '` should return an empty string when provided `null`, `undefined`, or empty string', 3, function() {
+        strictEqual(func(null), '');
+        strictEqual(func(undefined), '');
+        strictEqual(func(''), '');
+      });
+    });
+  }());
+
+  /*--------------------------------------------------------------------------*/
+
   QUnit.module('lodash methods');
 
   (function() {
-    var allMethods = _.reject(_.functions(_), _.bind(RegExp.prototype.test, /^_/));
+    var allMethods = _.reject(_.functions(_), function(methodName) {
+      return /^_/.test(methodName);
+    });
 
     var returnArrays = [
       'at',
@@ -10387,6 +10572,7 @@
       'pairs',
       'pluck',
       'pull',
+      'pullAt',
       'range',
       'reject',
       'remove',
@@ -10425,7 +10611,7 @@
 
     var acceptFalsey = _.difference(allMethods, rejectFalsey);
 
-    test('should accept falsey arguments', 185, function() {
+    test('should accept falsey arguments', 187, function() {
       var emptyArrays = _.map(falsey, _.constant([])),
           isExposed = '_' in root,
           oldDash = root._;
@@ -10468,7 +10654,7 @@
       });
     });
 
-    test('should return an array', 64, function() {
+    test('should return an array', 66, function() {
       var array = [1, 2, 3];
 
       _.each(returnArrays, function(methodName) {

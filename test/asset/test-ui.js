@@ -121,6 +121,10 @@
     var buildList = span1.lastChild,
         loaderList = span2.lastChild;
 
+    setTimeout(function() {
+      ui.timing.loadEventEnd = +new Date;
+    }, 1);
+
     init();
   });
 
@@ -161,8 +165,16 @@
     'loader': loader
   };
 
+  // expose page load timestamps
+  ui.timing = {
+    'loadEventEnd': 0
+  };
+
   // used to indicate testing a modularized build
   ui.isModularize = /\b(?:commonjs|(index|main)\.js|lodash-(?:amd|node)|modularize|npm)\b/.test([location.pathname, location.search, ui.buildPath]);
+
+  // used to indicate testing in Sauce Labs' automated test cloud
+  ui.isSauceLabs = location.port == '9001';
 
   // expose `ui`
   window.ui = ui;

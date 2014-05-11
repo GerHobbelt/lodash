@@ -1,5 +1,5 @@
 /*!
- * QUnit Extras v1.0.0
+ * QUnit Extras v1.1.0
  * Copyright 2011-2014 John-David Dalton <http://allyoucanleet.com/>
  * Based on a gist by Jörn Zaefferer <https://gist.github.com/722381>
  * Available under MIT license <http://mths.be/mit>
@@ -24,9 +24,10 @@
       reMessage = /^<span class='test-message'>([\s\S]*?)<\/span>/;
 
   /** Used to associate color names with their corresponding codes */
-  var colorCodes = {
-    'blue': 34,
+  var ansiCodes = {
+    'bold': 1,
     'green': 32,
+    'magenta': 35,
     'red': 31
   };
 
@@ -177,7 +178,7 @@
     var isSilent = document && !isPhantomPage;
 
     /** Used to indicate if running in Windows */
-    var isWindows = /win/i.test(os);
+    var isWindows = /\bwin/i.test(os);
 
     /** Used to display the wait throbber */
     var throbberDelay = 500,
@@ -275,17 +276,17 @@
      * @returns {string} Returns the colored string.
      */
     function color(colorName, string) {
-      var code = colorCodes[colorName];
+      var code = ansiCodes[colorName];
       return isWindows
         ? string
-        : ('\x1b[' + code + 'm' + string + '\x1b[0m');
+        : ('\x1B[' + code + 'm' + string + '\x1B[0m');
     }
 
     /**
      * Writes an inline message to standard output.
      *
      * @private
-     * @param {string} text The text to log.
+     * @param {string} [text=''] The text to log.
      */
     var logInline = (function() {
       // exit early if not Node.js
@@ -295,13 +296,16 @@
       }
       // cleanup any inline logs when exited via `ctrl+c`
       process.on('SIGINT', function() {
-        logInline('');
+        logInline();
         process.exit();
       });
 
       var prevLine = '';
       return function(text) {
         var blankLine = repeat(' ', prevLine.length);
+        if (text == null) {
+          text = '';
+        }
         if (text.length > hr.length) {
           text = text.slice(0, hr.length - 3) + '...';
         }
@@ -454,11 +458,11 @@
           ran = true;
 
           var failures = details.failed;
-
-          logInline('');
+          var statusColor = failures ? 'magenta' : 'green';
+          logInline();
           console.log(hr);
-          console.log(color('blue', '    PASS: ' + details.passed + '  FAIL: ' + failures + '  TOTAL: ' + details.total));
-          console.log(color(failures ? 'red' : 'green','    Finished in ' + details.runtime + ' milliseconds.'));
+          console.log(color(statusColor, '    PASS: ' + details.passed + '  FAIL: ' + failures + '  TOTAL: ' + details.total));
+          console.log(color(statusColor, '    Finished in ' + details.runtime + ' milliseconds.'));
           console.log(hr);
 
           // exit out of Node.js or PhantomJS
@@ -509,14 +513,14 @@
         if (hidepassed && !failures) {
           return;
         }
-        logInline('');
+        logInline();
         if (!modulePrinted) {
           modulePrinted = true;
           console.log(hr);
-          console.log(color('blue', moduleName));
+          console.log(color('bold', moduleName));
           console.log(hr);
         }
-        console.log(' ' + (failures ? color('red', 'FAIL') : color('green', 'PASS')) + ' - ' + color('blue', testName));
+        console.log(' ' + (failures ? color('red', 'FAIL') : color('green', 'PASS')) + ' - ' + testName);
 
         if (!failures) {
           return;
@@ -535,12 +539,12 @@
 
           var message = [
             result ? color('green', 'PASS') : color('red', 'FAIL'),
-            color('blue', type),
-            color('blue', entry.message || 'ok')
+            type,
+            entry.message || 'ok'
           ];
 
           if (!result && type == 'EQ') {
-            message.push(color('blue', 'Expected: ' + expected + ', Actual: ' + entry.actual));
+            message.push(color('magenta', 'Expected: ' + expected + ', Actual: ' + entry.actual));
           }
           console.log('    ' + message.join(' | '));
         }

@@ -36,8 +36,8 @@ branches:
   only:
     - master
 before_install:
-  - "[ $SAUCE_LABS == false ] || npm i chalk@\"~0.4.0\" ecstatic@\"~0.5.0\" request@\"~2.34.0\" sauce-tunnel-sc3-1@\"~1.0.0\""
-  - "[ $ISTANBUL == false ]   || (npm i -g coveralls@\"~2.10.0\" && npm i istanbul@\"~0.2.0\")"
+  - "[ $SAUCE_LABS == false ] || npm i chalk@\"^0.4.0\" ecstatic@\"^0.5.0\" request@\"^2.34.0\" sauce-tunnel-sc3-1@\"^1.0.0\""
+  - "[ $ISTANBUL == false ]   || (npm i -g coveralls@\"^2.10.0\" && npm i istanbul@\"^0.2.0\")"
   - "[ $BIN != 'narwhal' ] || (wget http://lodash.com/_travis/narwhal-0.3.2.zip && sudo unzip narwhal-0.3.2 -d /opt/ && rm narwhal-0.3.2.zip)"
   - "[ $BIN != 'narwhal' ] || (sudo ln -s /opt/narwhal-0.3.2/bin/narwhal /usr/local/bin/narwhal && sudo chmod +x /usr/local/bin/narwhal)"
   - "[ $BIN != 'rhino' ] || (sudo mkdir /opt/rhino-1.7R5 && sudo wget -O /opt/rhino-1.7R5/js.jar http://lodash.com/_travis/rhino-1.7R5.jar)"
@@ -48,7 +48,7 @@ before_install:
   - "mkdir ./node_modules/lodash-cli/node_modules && cd ./node_modules/lodash-cli/node_modules/ && ln -s ../../../ ./lodash && cd ../ && npm i . && cd ../../"
   - "node ./node_modules/lodash-cli/bin/lodash $BUILD -o ./dist/lodash.$BUILD.js"
 script:
-  - "[ $ISTANBUL == false ]    || (nvm use 0.11 && $BIN --harmony ./node_modules/istanbul/lib/cli.js cover -x \"**/vendor/**\" --report lcovonly ./test/test.js -- ./dist/lodash.$BUILD.js)"
+  - "[ $ISTANBUL == false ]    || (nvm install 0.11.11 && $BIN --harmony ./node_modules/istanbul/lib/cli.js cover -x \"**/vendor/**\" --report lcovonly ./test/test.js -- ./dist/lodash.$BUILD.js)"
   - "[ $ISTANBUL == true ] && [ $TRAVIS_PULL_REQUEST == false ] && nvm use 0.10 && cat ./coverage/lcov.info | coveralls && rm -rf ./coverage || true"
   - "([ $SAUCE_LABS == true ]  || [ $ISTANBUL == true ]) || cd ./test"
   - "([ $SAUCE_LABS == true ]  || [ $ISTANBUL == true ]) || $BIN $OPTION ./test.js ../dist/lodash.$BUILD.js"

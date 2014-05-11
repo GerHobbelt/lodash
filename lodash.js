@@ -75,7 +75,7 @@
    * See this [article on `RegExp` characters](http://www.regular-expressions.info/characters.html#special)
    * for more details.
    */
-  var reRegExpChars = /[.*+?^${}()|[\]\\]/g;
+  var reRegExpChars = /[.*+?^${}()|[\]\/\\]/g;
 
   /** Used to detect functions containing a `this` reference */
   var reThis = /\bthis\b/;
@@ -249,6 +249,26 @@
   }
 
   /**
+   * The base implementation of `_.at` without support for strings or individual
+   * key arguments.
+   *
+   * @private
+   * @param {Array|Object} collection The collection to iterate over.
+   * @param {number[]|string[]} [keys] The keys of elements to pick.
+   * @returns {Array} Returns the new array of picked elements.
+   */
+  function baseAt(collection, props) {
+    var index = -1,
+        length = props.length,
+        result = Array(length);
+
+    while(++index < length) {
+      result[index] = collection[props[index]];
+    }
+    return result;
+  }
+
+  /**
    * The base implementation of `compareAscending` used to compare values and
    * sort them in ascending order without guaranteeing a stable sort.
    *
@@ -304,8 +324,8 @@
   }
 
   /**
-   * Used by `_.max` and `_.min` as the default callback when a given
-   * collection is a string value.
+   * Used by `_.max` and `_.min` as the default callback when a given collection
+   * is a string value.
    *
    * @private
    * @param {string} string The string to inspect.
@@ -316,7 +336,8 @@
   }
 
   /**
-   * Gets the index of the first character of `string` that is not found in `chars`.
+   * Used by `_.trim` and `_.trimLeft` to get the index of the first character
+   * of `string` that is not found in `chars`.
    *
    * @private
    * @param {string} string The string to inspect.
@@ -336,7 +357,8 @@
   }
 
   /**
-   * Gets the index of the last character of `string` that is not found in `chars`.
+   * Used by `_.trim` and `_.trimRight` to get the index of the last character
+   * of `string` that is not found in `chars`.
    *
    * @private
    * @param {string} string The string to inspect.
@@ -467,7 +489,8 @@
   }
 
   /**
-   * Gets the index of the first non-whitespace character of `string`.
+   * Used by `_.trim` and `_.trimLeft` to get the index of the first non-whitespace
+   * character of `string`.
    *
    * @private
    * @param {string} string The string to inspect.
@@ -488,7 +511,8 @@
   }
 
   /**
-   * Gets the index of the last non-whitespace character of `string`.
+   * Used by `_.trim` and `_.trimRight` to get the index of the last non-whitespace
+   * character of `string`.
    *
    * @private
    * @param {string} string The string to inspect.
@@ -664,12 +688,12 @@
      * `flatten`, `forEach`, `forEachRight`, `forIn`, `forInRight`, `forOwn`,
      * `forOwnRight`, `functions`, `groupBy`, `indexBy`, `initial`, `intersection`,
      * `invert`, `invoke`, `keys`, `map`, `mapValues`, `matches`, `max`, `memoize`,
-     * `merge`, `min`, `noop`, `object`, `omit`, `once`, `pairs`, `partial`,
-     * `partialRight`, `pick`, `pluck`, `property`, `pull`, `push`, `range`,
-     * `reject`, `remove`, `rest`, `reverse`, `shuffle`, `slice`, `sort`, `sortBy`,
-     * `splice`, `tap`, `throttle`, `times`, `toArray`, `transform`, `union`,
-     * `uniq`, `unshift`, `unzip`, `values`, `where`, `without`, `wrap`, `xor`,
-     * and `zip`
+     * `merge`, `min`, `mixin`, `noop`, `object`, `omit`, `once`, `pairs`, `partial`,
+     * `partialRight`, `pick`, `pluck`, `property`, `pull`, `pullAt`, `push`,
+     * `range`, `reject`, `remove`, `rest`, `reverse`, `shuffle`, `slice`, `sort`,
+     * `sortBy`, `splice`, `tap`, `throttle`, `times`, `toArray`, `transform`,
+     * `union`, `uniq`, `unshift`, `unzip`, `values`, `where`, `without`, `wrap`,
+     * `xor`, and `zip`
      *
      * The non-chainable wrapper functions are:
      * `capitalize`, `clone`, `cloneDeep`, `contains`, `escape`, `every`, `find`,
@@ -677,10 +701,10 @@
      * `identity`, `indexOf`, `isArguments`, `isArray`, `isBoolean`, `isDate`,
      * `isElement`, `isEmpty`, `isEqual`, `isFinite`, `isFunction`, `isNaN`,
      * `isNull`, `isNumber`, `isObject`, `isPlainObject`, `isRegExp`, `isString`,
-     * `isUndefined`, `join`, `lastIndexOf`, `mixin`, `noConflict`, `now`,
-     * `parseInt`, `pop`, `random`, `reduce`, `reduceRight`, `result`, `shift`,
-     * `size`, `some`, `sortedIndex`, `runInContext`, `template`, `trim`,
-     * `trimLeft`, `trimRight`, `unescape`, `uniqueId`, and `value`
+     * `isUndefined`, `join`, `lastIndexOf`, `noConflict`, `now`, `parseInt`,
+     * `pop`, `random`, `reduce`, `reduceRight`, `result`, `shift`, `size`, `some`,
+     * `sortedIndex`, `runInContext`, `template`, `trim`, `trimLeft`, `trimRight`,
+     * `unescape`, `uniqueId`, and `value`
      *
      * The wrapper functions `first`, `last`, and `sample` return wrapped values
      * when `n` is provided, otherwise they return unwrapped values.
@@ -797,7 +821,8 @@
 
       /**
        * Detect if functions can be decompiled by `Function#toString`
-       * (all but PS3 and older Opera mobile browsers; forced `false` for Windows 8 apps).
+       * (all but Firefox OS certified apps, older Opera mobile browsers, and
+       * the PlayStation 3; forced `false` for Windows 8 apps).
        *
        * @memberOf _.support
        * @type boolean
@@ -1715,6 +1740,9 @@
                 if ((result = baseIsEqual(value[index], othValue, callback, isWhere, stackA, stackB))) {
                   break;
                 }
+              }
+              if (!result) {
+                break;
               }
             } else if (!(result = baseIsEqual(value[size], othValue, callback, isWhere, stackA, stackB))) {
               break;
@@ -2924,6 +2952,47 @@
     }
 
     /**
+     * Removes elements from `array` corresponding to the specified indexes and
+     * returns an array of removed elements. Indexes may be specified as an array
+     * of indexes or as individual arguments.
+     *
+     * Note: Unlike `_.at`, this method mutates `array`.
+     *
+     * @static
+     * @memberOf _
+     * @category Arrays
+     * @param {Array} array The array to modify.
+     * @param {...(number|number[])} [index] The indexes of values to remove,
+     *  specified as individual indexes or arrays of indexes.
+     * @returns {Array} Returns the new array of removed elements.
+     * @example
+     *
+     * var array = [5, 10, 15, 20];
+     * var evens = _.pullAt(array, [1, 3]);
+     *
+     * console.log(array);
+     * // => [5, 15]
+     *
+     * console.log(evens);
+     * // => [10, 20]
+     */
+    function pullAt(array) {
+      var indexes = baseFlatten(arguments, true, false, 1),
+          length = indexes.length,
+          result = baseAt(array, indexes);
+
+      indexes.sort(baseCompareAscending);
+      while (length--) {
+        var index = parseFloat(indexes[length]);
+        if (index != previous && index > -1 && index % 1 == 0) {
+          var previous = index;
+          splice.call(array, index, 1);
+        }
+      }
+      return result;
+    }
+
+    /**
      * Removes all elements from `array` that the predicate returns truthy for
      * and returns an array of removed elements. The predicate is bound to `thisArg`
      * and invoked with three arguments; (value, index, array).
@@ -2945,17 +3014,17 @@
      *  per iteration. If a property name or object is provided it will be used
      *  to create a "_.pluck" or "_.where" style callback respectively.
      * @param {*} [thisArg] The `this` binding of `predicate`.
-     * @returns {Array} Returns the array of removed elements.
+     * @returns {Array} Returns the new array of removed elements.
      * @example
      *
-     * var array = [1, 2, 3, 4, 5, 6];
+     * var array = [1, 2, 3, 4];
      * var evens = _.remove(array, function(num) { return num % 2 == 0; });
      *
      * console.log(array);
-     * // => [1, 3, 5]
+     * // => [1, 3]
      *
      * console.log(evens);
-     * // => [2, 4, 6]
+     * // => [2, 4]
      */
     function remove(array, predicate, thisArg) {
       var index = -1,
@@ -3079,17 +3148,17 @@
      * // => 2
      *
      * var dict = {
-     *   'wordToNumber': { 'twenty': 20, 'thirty': 30, 'fourty': 40, 'fifty': 50 }
+     *   'wordToNumber': { 'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50 }
      * };
      *
      * // using `callback`
-     * _.sortedIndex(['twenty', 'thirty', 'fifty'], 'fourty', function(word) {
+     * _.sortedIndex(['twenty', 'thirty', 'fifty'], 'forty', function(word) {
      *   return dict.wordToNumber[word];
      * });
      * // => 2
      *
      * // using `callback` with `thisArg`
-     * _.sortedIndex(['twenty', 'thirty', 'fifty'], 'fourty', function(word) {
+     * _.sortedIndex(['twenty', 'thirty', 'fifty'], 'forty', function(word) {
      *   return this.wordToNumber[word];
      * }, dict);
      * // => 2
@@ -3583,17 +3652,17 @@
     /*--------------------------------------------------------------------------*/
 
     /**
-     * Creates an array of elements from the specified indexes, or keys, of the
-     * `collection`. Indexes may be specified as individual arguments or as arrays
-     * of indexes.
+     * Creates an array of elements corresponding to the specified keys, or indexes,
+     * of the collection. Keys may be specified as individual arguments or as arrays
+     * of keys.
      *
      * @static
      * @memberOf _
      * @category Collections
      * @param {Array|Object|string} collection The collection to iterate over.
-     * @param {...(number|number[]|string|string[])} [index] The indexes to retrieve,
-     *  specified as individual indexes or arrays of indexes.
-     * @returns {Array} Returns the array of picked elements.
+     * @param {...(number|number[]|string|string[])} [keys] The keys of elements
+     *  to pick, specified as individual keys or arrays of keys.
+     * @returns {Array} Returns the new array of picked elements.
      * @example
      *
      * _.at(['a', 'b', 'c', 'd', 'e'], [0, 2, 4]);
@@ -3602,25 +3671,11 @@
      * _.at(['fred', 'barney', 'pebbles'], 0, 2);
      * // => ['fred', 'pebbles']
      */
-    function at(collection, guard) {
-      var args = arguments,
-          index = -1,
-          props = baseFlatten(args, true, false, 1),
-          length = props.length,
-          type = typeof guard;
-
-      // enables use as a callback for functions like `_.map`
-      if ((type == 'number' || type == 'string') && args[2] && args[2][guard] === collection) {
-        length = 1;
-      }
+    function at(collection) {
       if (support.unindexedChars && isString(collection)) {
         collection = collection.split('');
       }
-      var result = Array(length);
-      while(++index < length) {
-        result[index] = collection[props[index]];
-      }
-      return result;
+      return baseAt(collection, baseFlatten(arguments, true, false, 1));
     }
 
     /**
@@ -4201,6 +4256,9 @@
      * _.max([4, 2, 8, 6]);
      * // => 8
      *
+     * _.max([]);
+     * // => -Infinity
+     *
      * var characters = [
      *   { 'name': 'barney', 'age': 36 },
      *   { 'name': 'fred',   'age': 40 }
@@ -4275,6 +4333,9 @@
      *
      * _.min([4, 2, 8, 6]);
      * // => 2
+     *
+     * _.min([]);
+     * // => Infinity
      *
      * var characters = [
      *   { 'name': 'barney', 'age': 36 },
@@ -4886,8 +4947,8 @@
     /**
      * Binds methods of an object to the object itself, overwriting the existing
      * method. Method names may be specified as individual arguments or as arrays
-     * of method names. If no method names are provided all the function properties
-     * of `object` will be bound.
+     * of method names. If no method names are provided all enumerable function
+     * properties, own and inherited, of `object` will be bound.
      *
      * Note: This method does not set the `length` property of bound functions.
      *
@@ -4895,8 +4956,8 @@
      * @memberOf _
      * @category Functions
      * @param {Object} object The object to bind and assign the bound methods to.
-     * @param {...string} [methodName] The object method names to
-     *  bind, specified as individual method names or arrays of method names.
+     * @param {...string} [methodNames] The object method names to bind, specified
+     *  as individual method names or arrays of method names.
      * @returns {Object} Returns `object`.
      * @example
      *
@@ -5260,28 +5321,28 @@
      * fibonacci(9)
      * // => 34
      *
-     * var data = {
-     *   'fred': { 'name': 'fred', 'age': 40 },
-     *   'pebbles': { 'name': 'pebbles', 'age': 1 }
-     * };
-     *
      * // modifying the result cache
-     * var get = _.memoize(function(name) { return data[name]; }, _.identity);
-     * get('pebbles');
-     * // => { 'name': 'pebbles', 'age': 1 }
+     * var upperCase = _.memoize(function(string) {
+     *   return string.toUpperCase();
+     * });
      *
-     * get.cache.pebbles.name = 'penelope';
-     * get('pebbles');
-     * // => { 'name': 'penelope', 'age': 1 }
+     * upperCase('fred');
+     * // => 'FRED'
+     *
+     * upperCase.cache.fred = 'BARNEY'
+     * upperCase('fred');
+     * // => 'BARNEY'
      */
     function memoize(func, resolver) {
       if (!isFunction(func) || (resolver && !isFunction(resolver))) {
         throw new TypeError(funcErrorText);
       }
       var memoized = function() {
-        var cache = memoized.cache,
-            key = resolver ? resolver.apply(this, arguments) : '_' + arguments[0];
-
+        var key = resolver ? resolver.apply(this, arguments) : arguments[0];
+        if (key == '__proto__') {
+          return func.apply(this, arguments);
+        }
+        var cache = memoized.cache;
         return hasOwnProperty.call(cache, key)
           ? cache[key]
           : (cache[key] = func.apply(this, arguments));
@@ -5401,20 +5462,15 @@
      * @returns {Function} Returns the new partially applied function.
      * @example
      *
-     * var defaultsDeep = _.partialRight(_.merge, _.defaults);
+     * var defaultsDeep = _.partialRight(_.merge, function deep(value, other) {
+     *   return _.merge(value, other, deep);
+     * });
      *
-     * var options = {
-     *   'variable': 'data',
-     *   'imports': { 'jq': $ }
-     * };
+     * var object = { 'a': { 'b': { 'c': 1 } } },
+     *     source = { 'a': { 'b': { 'c': 2, 'd': 2 } } };
      *
-     * defaultsDeep(options, _.templateSettings);
-     *
-     * options.variable
-     * // => 'data'
-     *
-     * options.imports
-     * // => { '_': _, 'jq': $ }
+     * defaultsDeep(object, source);
+     * // => { 'a': { 'b': { 'c': 1, 'd': 2 } } }
      */
     function partialRight(func) {
       if (func) {
@@ -5516,7 +5572,7 @@
      * @alias extend
      * @category Objects
      * @param {Object} object The destination object.
-     * @param {...Object} [source] The source objects.
+     * @param {...Object} [sources] The source objects.
      * @param {Function} [callback] The function to customize assigning values.
      * @param {*} [thisArg] The `this` binding of `callback`.
      * @returns {Object} Returns the destination object.
@@ -5717,11 +5773,14 @@
      * object for all destination properties that resolve to `undefined`. Once a
      * property is set, additional defaults of the same property will be ignored.
      *
+     * Note: See the [documentation example of `_.partialRight`](http://lodash.com/docs#partialRight)
+     * for a deep version of this method.
+     *
      * @static
      * @memberOf _
      * @category Objects
      * @param {Object} object The destination object.
-     * @param {...Object} [source] The source objects.
+     * @param {...Object} [sources] The source objects.
      * @param- {Object} [guard] Enables use as a callback for functions like `_.reduce`.
      * @returns {Object} Returns the destination object.
      * @example
@@ -5730,7 +5789,7 @@
      * // => { 'name': 'barney', 'employer': 'slate' }
      */
     function defaults(object) {
-      if (!object || arguments.length < 2) {
+      if (!object) {
         return object;
       }
       var args = slice(arguments);
@@ -5941,8 +6000,8 @@
     }
 
     /**
-     * Creates a sorted array of property names of all enumerable properties,
-     * own and inherited, of `object` that have function values.
+     * Creates a sorted array of property names of all enumerable function
+     * properties, own and inherited, of `object`.
      *
      * @static
      * @memberOf _
@@ -6362,7 +6421,7 @@
       // and avoid a V8 bug
       // https://code.google.com/p/v8/issues/detail?id=2291
       var type = typeof value;
-      return (value && (type == 'function' || type == 'object')) || false;
+      return type == 'function' || (value && type == 'object') || false;
     }
 
     /**
@@ -6505,9 +6564,7 @@
      * // => false
      */
     function isRegExp(value) {
-      var type = typeof value;
-      return (value && (type == 'function' || type == 'object') &&
-        toString.call(value) == regexpClass) || false;
+      return (isObject(value) && toString.call(value) == regexpClass) || false;
     }
 
     /**
@@ -6713,7 +6770,7 @@
      * @memberOf _
      * @category Objects
      * @param {Object} object The destination object.
-     * @param {...Object} [source] The source objects.
+     * @param {...Object} [sources] The source objects.
      * @param {Function} [callback] The function to customize merging properties.
      * @param {*} [thisArg] The `this` binding of `callback`.
      * @returns {Object} Returns the destination object.
@@ -6752,13 +6809,13 @@
      * // => { 'fruits': ['apple', 'banana'], 'vegetables': ['beet', 'carrot] }
      */
     function merge(object, source, guard) {
-      if (!object) {
-        return object;
-      }
       var args = arguments,
           length = args.length,
           type = typeof guard;
 
+      if (!object || length < 2) {
+        return object;
+      }
       // enables use as a callback for functions like `_.reduce`
       if ((type == 'number' || type == 'string') && args[3] && args[3][guard] === source) {
         length = 2;
@@ -6792,7 +6849,7 @@
      * @memberOf _
      * @category Objects
      * @param {Object} object The source object.
-     * @param {Function|...string|string[]} [predicate] The function called per
+     * @param {Function|...(string|string[])} [predicate] The function called per
      *  iteration or property names to omit, specified as individual property
      *  names or arrays of property names.
      * @param {*} [thisArg] The `this` binding of `predicate`.
@@ -6818,7 +6875,7 @@
       while (length--) {
         omitProps[length] = String(omitProps[length]);
       }
-      return pick(object, baseDifference(keysIn(object),  omitProps));
+      return pick(object, baseDifference(keysIn(object), omitProps));
     }
 
     /**
@@ -6860,7 +6917,7 @@
      * @memberOf _
      * @category Objects
      * @param {Object} object The source object.
-     * @param {Function|...string|string[]} [predicate] The function called per
+     * @param {Function|...(string|string[])} [predicate] The function called per
      *  iteration or property names to pick, specified as individual property
      *  names or arrays of property names.
      * @param {*} [thisArg] The `this` binding of `predicate`.
@@ -6937,9 +6994,10 @@
         if (isArr) {
           accumulator = [];
         } else {
-          var ctor = object && object.constructor,
-              proto = ctor && ctor.prototype;
-
+          if (isObject(object)) {
+            var ctor = object.constructor,
+                proto = ctor && ctor.prototype;
+          }
           accumulator = baseCreate(proto);
         }
       }
@@ -7778,7 +7836,7 @@
     function createCallback(func, thisArg, argCount) {
       var type = typeof func;
       if (type == 'function' || func == null) {
-        return (typeof thisArg == 'undefined' || !('prototype' in func)) &&
+        return (typeof thisArg == 'undefined' || !(func && 'prototype' in func)) &&
           func || baseCreateCallback(func, thisArg, argCount);
       }
       // handle "_.pluck" and "_.where" style callback shorthands
@@ -7870,11 +7928,12 @@
      * @static
      * @memberOf _
      * @category Utilities
-     * @param {Function|Object} [object=lodash] object The destination object.
+     * @param {Function|Object} [object=this] object The destination object.
      * @param {Object} source The object of functions to add.
      * @param {Object} [options] The options object.
      * @param {boolean} [options.chain=true] Specify whether the functions added
      *  are chainable.
+     * @returns {Function|Object} Returns `object`.
      * @example
      *
      * function vowels(string) {
@@ -7903,7 +7962,7 @@
           options = source;
         }
         source = object;
-        object = lodash;
+        object = this;
         methodNames = functions(source);
       }
       if (options === false) {
@@ -7940,6 +7999,7 @@
           }(func));
         }
       }
+      return object;
     }
 
     /**
@@ -8104,7 +8164,7 @@
       }
       if (floating || min % 1 || max % 1) {
         var rand = nativeRandom();
-        return nativeMin(min + (rand * (max - min + parseFloat('1e-' + ((rand +'').length - 1)))), max);
+        return nativeMin(min + (rand * (max - min + parseFloat('1e-' + (String(rand).length - 1)))), max);
       }
       return baseRandom(min, max);
     }
@@ -8312,6 +8372,7 @@
     lodash.memoize = memoize;
     lodash.merge = merge;
     lodash.min = min;
+    lodash.mixin = mixin;
     lodash.negate = negate;
     lodash.omit = omit;
     lodash.once = once;
@@ -8323,6 +8384,7 @@
     lodash.pluck = pluck;
     lodash.property = property;
     lodash.pull = pull;
+    lodash.pullAt = pullAt;
     lodash.range = range;
     lodash.reject = reject;
     lodash.remove = remove;
@@ -8360,7 +8422,7 @@
     lodash.unzip = zip;
 
     // add functions to `lodash.prototype`
-    mixin(assign({}, lodash));
+    mixin(lodash, assign({}, lodash));
 
     /*--------------------------------------------------------------------------*/
 
@@ -8404,7 +8466,6 @@
     lodash.isUndefined = isUndefined;
     lodash.kebabCase = kebabCase;
     lodash.lastIndexOf = lastIndexOf;
-    lodash.mixin = mixin;
     lodash.noConflict = noConflict;
     lodash.noop = noop;
     lodash.now = now;
@@ -8440,7 +8501,7 @@
     lodash.include = contains;
     lodash.inject = reduce;
 
-    mixin(function() {
+    mixin(lodash, function() {
       var source = {}
       baseForOwn(lodash, function(func, methodName) {
         if (!lodash.prototype[methodName]) {
@@ -8461,7 +8522,7 @@
     lodash.takeRightWhile = takeRightWhile;
     lodash.takeWhile = takeWhile;
 
-    // add aliases
+    // add alias
     lodash.head = first;
 
     baseForOwn(lodash, function(func, methodName) {

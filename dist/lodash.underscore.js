@@ -52,7 +52,7 @@
    * See this [article on `RegExp` characters](http://www.regular-expressions.info/characters.html#special)
    * for more details.
    */
-  var reRegExpChars = /[.*+?^${}()|[\]\\]/g;
+  var reRegExpChars = /[.*+?^${}()|[\]\/\\]/g;
 
   /** Used to match unescaped characters in compiled string literals */
   var reUnescapedString = /['\n\r\u2028\u2029\\]/g;
@@ -284,12 +284,12 @@
    * `flatten`, `forEach`, `forEachRight`, `forIn`, `forInRight`, `forOwn`,
    * `forOwnRight`, `functions`, `groupBy`, `indexBy`, `initial`, `intersection`,
    * `invert`, `invoke`, `keys`, `map`, `mapValues`, `matches`, `max`, `memoize`,
-   * `merge`, `min`, `noop`, `object`, `omit`, `once`, `pairs`, `partial`,
-   * `partialRight`, `pick`, `pluck`, `property`, `pull`, `push`, `range`,
-   * `reject`, `remove`, `rest`, `reverse`, `shuffle`, `slice`, `sort`, `sortBy`,
-   * `splice`, `tap`, `throttle`, `times`, `toArray`, `transform`, `union`,
-   * `uniq`, `unshift`, `unzip`, `values`, `where`, `without`, `wrap`, `xor`,
-   * and `zip`
+   * `merge`, `min`, `mixin`, `noop`, `object`, `omit`, `once`, `pairs`, `partial`,
+   * `partialRight`, `pick`, `pluck`, `property`, `pull`, `pullAt`, `push`,
+   * `range`, `reject`, `remove`, `rest`, `reverse`, `shuffle`, `slice`, `sort`,
+   * `sortBy`, `splice`, `tap`, `throttle`, `times`, `toArray`, `transform`,
+   * `union`, `uniq`, `unshift`, `unzip`, `values`, `where`, `without`, `wrap`,
+   * `xor`, and `zip`
    *
    * The non-chainable wrapper functions are:
    * `capitalize`, `clone`, `cloneDeep`, `contains`, `escape`, `every`, `find`,
@@ -297,10 +297,10 @@
    * `identity`, `indexOf`, `isArguments`, `isArray`, `isBoolean`, `isDate`,
    * `isElement`, `isEmpty`, `isEqual`, `isFinite`, `isFunction`, `isNaN`,
    * `isNull`, `isNumber`, `isObject`, `isPlainObject`, `isRegExp`, `isString`,
-   * `isUndefined`, `join`, `lastIndexOf`, `mixin`, `noConflict`, `now`,
-   * `parseInt`, `pop`, `random`, `reduce`, `reduceRight`, `result`, `shift`,
-   * `size`, `some`, `sortedIndex`, `runInContext`, `template`, `trim`,
-   * `trimLeft`, `trimRight`, `unescape`, `uniqueId`, and `value`
+   * `isUndefined`, `join`, `lastIndexOf`, `noConflict`, `now`, `parseInt`,
+   * `pop`, `random`, `reduce`, `reduceRight`, `result`, `shift`, `size`, `some`,
+   * `sortedIndex`, `runInContext`, `template`, `trim`, `trimLeft`, `trimRight`,
+   * `unescape`, `uniqueId`, and `value`
    *
    * The wrapper functions `first`, `last`, and `sample` return wrapped values
    * when `n` is provided, otherwise they return unwrapped values.
@@ -1667,17 +1667,17 @@
    * // => 2
    *
    * var dict = {
-   *   'wordToNumber': { 'twenty': 20, 'thirty': 30, 'fourty': 40, 'fifty': 50 }
+   *   'wordToNumber': { 'twenty': 20, 'thirty': 30, 'forty': 40, 'fifty': 50 }
    * };
    *
    * // using `callback`
-   * _.sortedIndex(['twenty', 'thirty', 'fifty'], 'fourty', function(word) {
+   * _.sortedIndex(['twenty', 'thirty', 'fifty'], 'forty', function(word) {
    *   return dict.wordToNumber[word];
    * });
    * // => 2
    *
    * // using `callback` with `thisArg`
-   * _.sortedIndex(['twenty', 'thirty', 'fifty'], 'fourty', function(word) {
+   * _.sortedIndex(['twenty', 'thirty', 'fifty'], 'forty', function(word) {
    *   return this.wordToNumber[word];
    * }, dict);
    * // => 2
@@ -2531,6 +2531,9 @@
    * _.max([4, 2, 8, 6]);
    * // => 8
    *
+   * _.max([]);
+   * // => -Infinity
+   *
    * var characters = [
    *   { 'name': 'barney', 'age': 36 },
    *   { 'name': 'fred',   'age': 40 }
@@ -2603,6 +2606,9 @@
    *
    * _.min([4, 2, 8, 6]);
    * // => 2
+   *
+   * _.min([]);
+   * // => Infinity
    *
    * var characters = [
    *   { 'name': 'barney', 'age': 36 },
@@ -3203,8 +3209,8 @@
    * @memberOf _
    * @category Functions
    * @param {Object} object The object to bind and assign the bound methods to.
-   * @param {...string} [methodName] The object method names to
-   *  bind, specified as individual method names or arrays of method names.
+   * @param {...string} [methodNames] The object method names to bind, specified
+   *  as individual method names or arrays of method names.
    * @returns {Object} Returns `object`.
    * @example
    *
@@ -3490,19 +3496,17 @@
    * fibonacci(9)
    * // => 34
    *
-   * var data = {
-   *   'fred': { 'name': 'fred', 'age': 40 },
-   *   'pebbles': { 'name': 'pebbles', 'age': 1 }
-   * };
-   *
    * // modifying the result cache
-   * var get = _.memoize(function(name) { return data[name]; }, _.identity);
-   * get('pebbles');
-   * // => { 'name': 'pebbles', 'age': 1 }
+   * var upperCase = _.memoize(function(string) {
+   *   return string.toUpperCase();
+   * });
    *
-   * get.cache.pebbles.name = 'penelope';
-   * get('pebbles');
-   * // => { 'name': 'penelope', 'age': 1 }
+   * upperCase('fred');
+   * // => 'FRED'
+   *
+   * upperCase.cache.fred = 'BARNEY'
+   * upperCase('fred');
+   * // => 'BARNEY'
    */
   function memoize(func, resolver) {
     if (!isFunction(func) || (resolver && !isFunction(resolver))) {
@@ -3510,7 +3514,10 @@
     }
     var cache = {};
     return function() {
-      var key = resolver ? resolver.apply(this, arguments) : '_' + arguments[0];
+      var key = resolver ? resolver.apply(this, arguments) : arguments[0];
+      if (key == '__proto__') {
+        return func.apply(this, arguments);
+      }
       return hasOwnProperty.call(cache, key)
         ? cache[key]
         : (cache[key] = func.apply(this, arguments));
@@ -3697,7 +3704,7 @@
    * @alias extend
    * @category Objects
    * @param {Object} object The destination object.
-   * @param {...Object} [source] The source objects.
+   * @param {...Object} [sources] The source objects.
    * @param {Function} [callback] The function to customize assigning values.
    * @param {*} [thisArg] The `this` binding of `callback`.
    * @returns {Object} Returns the destination object.
@@ -3791,11 +3798,14 @@
    * object for all destination properties that resolve to `undefined`. Once a
    * property is set, additional defaults of the same property will be ignored.
    *
+   * Note: See the [documentation example of `_.partialRight`](http://lodash.com/docs#partialRight)
+   * for a deep version of this method.
+   *
    * @static
    * @memberOf _
    * @category Objects
    * @param {Object} object The destination object.
-   * @param {...Object} [source] The source objects.
+   * @param {...Object} [sources] The source objects.
    * @param- {Object} [guard] Enables use as a callback for functions like `_.reduce`.
    * @returns {Object} Returns the destination object.
    * @example
@@ -4191,7 +4201,7 @@
     // and avoid a V8 bug
     // https://code.google.com/p/v8/issues/detail?id=2291
     var type = typeof value;
-    return (value && (type == 'function' || type == 'object')) || false;
+    return type == 'function' || (value && type == 'object') || false;
   }
 
   /**
@@ -4291,9 +4301,7 @@
    * // => false
    */
   function isRegExp(value) {
-    var type = typeof value;
-    return (value && (type == 'function' || type == 'object') &&
-      toString.call(value) == regexpClass) || false;
+    return (isObject(value) && toString.call(value) == regexpClass) || false;
   }
 
   /**
@@ -4404,7 +4412,7 @@
    * @memberOf _
    * @category Objects
    * @param {Object} object The source object.
-   * @param {Function|...string|string[]} [predicate] The function called per
+   * @param {Function|...(string|string[])} [predicate] The function called per
    *  iteration or property names to omit, specified as individual property
    *  names or arrays of property names.
    * @param {*} [thisArg] The `this` binding of `predicate`.
@@ -4426,7 +4434,7 @@
     while (length--) {
       omitProps[length] = String(omitProps[length]);
     }
-    return pick(object, baseDifference(keysIn(object),  omitProps));
+    return pick(object, baseDifference(keysIn(object), omitProps));
   }
 
   /**
@@ -4468,7 +4476,7 @@
    * @memberOf _
    * @category Objects
    * @param {Object} object The source object.
-   * @param {Function|...string|string[]} [predicate] The function called per
+   * @param {Function|...(string|string[])} [predicate] The function called per
    *  iteration or property names to pick, specified as individual property
    *  names or arrays of property names.
    * @param {*} [thisArg] The `this` binding of `predicate`.
@@ -4795,7 +4803,7 @@
   function createCallback(func, thisArg, argCount) {
     var type = typeof func;
     if (type == 'function' || func == null) {
-      return (typeof thisArg == 'undefined' || !('prototype' in func)) &&
+      return (typeof thisArg == 'undefined' || !(func && 'prototype' in func)) &&
         func || baseCreateCallback(func, thisArg, argCount);
     }
     // handle "_.pluck" and "_.where" style callback shorthands
@@ -4873,11 +4881,12 @@
    * @static
    * @memberOf _
    * @category Utilities
-   * @param {Function|Object} [object=lodash] object The destination object.
+   * @param {Function|Object} [object=this] object The destination object.
    * @param {Object} source The object of functions to add.
    * @param {Object} [options] The options object.
    * @param {boolean} [options.chain=true] Specify whether the functions added
    *  are chainable.
+   * @returns {Function|Object} Returns `object`.
    * @example
    *
    * function vowels(string) {
@@ -5209,6 +5218,7 @@
   lodash.max = max;
   lodash.memoize = memoize;
   lodash.min = min;
+  lodash.mixin = mixin;
   lodash.omit = omit;
   lodash.once = once;
   lodash.pairs = pairs;
@@ -5273,7 +5283,6 @@
   lodash.isString = isString;
   lodash.isUndefined = isUndefined;
   lodash.lastIndexOf = lastIndexOf;
-  lodash.mixin = mixin;
   lodash.noConflict = noConflict;
   lodash.now = now;
   lodash.random = random;
@@ -5304,7 +5313,7 @@
   lodash.sample = sample;
   lodash.take = take;
 
-  // add aliases
+  // add alias
   lodash.head = first;
 
   /*--------------------------------------------------------------------------*/
@@ -5325,36 +5334,36 @@
   lodash.prototype.chain = wrapperChain;
   lodash.prototype.value = wrapperValueOf;
 
-    // add `Array` mutator functions to the wrapper
-    arrayEach(['pop', 'push', 'reverse', 'shift', 'sort', 'splice', 'unshift'], function(methodName) {
-      var func = arrayRef[methodName];
-      lodash.prototype[methodName] = function() {
-        var value = this.__wrapped__;
-        func.apply(value, arguments);
+  // add `Array` mutator functions to the wrapper
+  arrayEach(['pop', 'push', 'reverse', 'shift', 'sort', 'splice', 'unshift'], function(methodName) {
+    var func = arrayRef[methodName];
+    lodash.prototype[methodName] = function() {
+      var value = this.__wrapped__;
+      func.apply(value, arguments);
 
-        // avoid array-like object bugs with `Array#shift` and `Array#splice`
-        // in Firefox < 10 and IE < 9
-        if (!support.spliceObjects && value.length === 0) {
-          delete value[0];
-        }
-        return this;
-      };
-    });
+      // avoid array-like object bugs with `Array#shift` and `Array#splice`
+      // in Firefox < 10 and IE < 9
+      if (!support.spliceObjects && value.length === 0) {
+        delete value[0];
+      }
+      return this;
+    };
+  });
 
-    // add `Array` accessor functions to the wrapper
-    arrayEach(['concat', 'join', 'slice'], function(methodName) {
-      var func = arrayRef[methodName];
-      lodash.prototype[methodName] = function() {
-        var value = this.__wrapped__,
-            result = func.apply(value, arguments);
+  // add `Array` accessor functions to the wrapper
+  arrayEach(['concat', 'join', 'slice'], function(methodName) {
+    var func = arrayRef[methodName];
+    lodash.prototype[methodName] = function() {
+      var value = this.__wrapped__,
+          result = func.apply(value, arguments);
 
-        if (this.__chain__) {
-          result = new lodashWrapper(result);
-          result.__chain__ = true;
-        }
-        return result;
-      };
-    });
+      if (this.__chain__) {
+        result = new lodashWrapper(result);
+        result.__chain__ = true;
+      }
+      return result;
+    };
+  });
 
   /*--------------------------------------------------------------------------*/
 
